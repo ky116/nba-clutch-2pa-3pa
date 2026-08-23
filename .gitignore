@@ -1,0 +1,50 @@
+# Local environments
+.venv/
+.r_libs_*/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Logs and scheduler output
+logs/
+*.log
+slurm-*.out
+
+# Large local data and model artifacts
+nba_data/*
+!nba_data/.gitkeep
+data/*
+!data/.gitkeep
+!data/nba_raw/
+data/nba_raw/*
+!data/nba_raw/.gitkeep
+!data/processed/
+data/processed/*
+!data/processed/.gitkeep
+!data/wp/
+data/wp/*
+!data/wp/.gitkeep
+!data/analysis/
+data/analysis/*
+!data/analysis/.gitkeep
+models/*
+!models/.gitkeep
+
+# Generated analysis outputs are excluded by default.
+results/*
+!results/.gitkeep
+appendix_terminal_fix_20260616_bundle/
+
+# Temporary and local scratch files
+.joblib/
+tmp/
+temp/
+*.tmp
+*.bak
+
+# Retained manuscript figures
+!figures/
+!figures/*.png
