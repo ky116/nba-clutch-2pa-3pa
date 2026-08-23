@@ -1,8 +1,12 @@
 # nba-clutch-2pa-3pa
 
-This repository contains code to reproduce the analyses reported in
-`main.tex` and `Supplementary_Material.tex` for the regular-season NBA clutch
-shot-choice manuscript.
+This repository contains code and reproducibility materials for the manuscript:
+
+**The relative value of two- and three-point attempts varies across NBA clutch situations**
+
+The analysis examines the adjusted contrast in fitted win probability between
+realized three-point attempts (3PA) and two-point attempts (2PA) across NBA
+clutch-time game states.
 
 The workflow covers:
 
@@ -79,9 +83,14 @@ DR/CATE wrappers default to `RANDOM_STATE=123`, figure subsampling defaults to
 ## Data
 
 The workflow expects NBA play-by-play and shot-detail inputs derived from the
-open-source `nba_data` repository. Large raw, derived, and model-output
-directories such as `nba_data/`, `data/`, `models/`, and most of `results/` are
-not intended to be committed to the public code repository.
+open-source [`nba_data`](https://github.com/shufinskiy/nba_data) repository.
+Obtain the corresponding regular-season exports from that upstream repository
+following its documentation, then place or symlink the required CSV files under
+`data/nba_raw/` using the layout below.
+
+Large raw, derived, and model-output directories such as `nba_data/`, `data/`,
+`models/`, and most of `results/` are not intended to be committed to the
+public code repository.
 
 Directory roles:
 
@@ -204,7 +213,12 @@ public reproduction repository.
 ## Manuscript figure assembly
 
 The retained manuscript figures are assembled from the CATE outputs above and
-copied to the repository root with their manuscript filenames:
+written under `figures/` with their manuscript filenames.
+
+If the required derived CATE outputs and figure-source files are already
+available locally, this section can be used to rebuild the manuscript figures
+without rerunning the full WP and DR/CATE estimation pipeline. Otherwise, run
+the full workflow above first.
 
 ```sh
 # Rebuild the held-out walk-forward ensemble surface.
@@ -255,6 +269,17 @@ desired.
 - `scripts/core/audit_forced_late_down3_wp_cells.py`, `scripts/core/make_four_cell_uncertainty.py`,
   and `scripts/helpers/local_tail_*` / `plot_observed_*`: late-clock
   supplement diagnostics
+
+## Citation
+
+If you use this code or the accompanying reproducibility materials, please cite
+the corresponding manuscript. The formal article citation and DOI will be added
+after publication.
+
+For the underlying NBA data, please also follow the citation and licensing
+guidance provided by the upstream
+[`nba_data`](https://github.com/shufinskiy/nba_data) repository and its data
+sources.
 
 ## License
 
