@@ -1,0 +1,125 @@
+{
+  "mode": "full_data_retune_then_train",
+  "train_start": 2000,
+  "train_end": 2024,
+  "n_rows": 325791,
+  "feature_cols": [
+    "time_left_game",
+    "score_diff",
+    "OT_flag",
+    "start_type",
+    "start_type_group",
+    "after_off_reb",
+    "elo_diff",
+    "before_home_possession",
+    "era",
+    "own_fouls_period",
+    "opp_fouls_period",
+    "timeouts_left_us",
+    "timeouts_left_them",
+    "own_allowed_2p_pct_eb",
+    "own_allowed_3p_pct_eb",
+    "own_off_2p_pct_eb",
+    "own_off_3p_pct_eb",
+    "own_off_3pa_share_eb",
+    "own_off_2pa_share_eb",
+    "own_allowed_3pa_share_eb",
+    "opp_allowed_2p_pct_eb",
+    "opp_allowed_3p_pct_eb",
+    "opp_off_2p_pct_eb",
+    "opp_off_3p_pct_eb",
+    "opp_off_3pa_share_eb",
+    "opp_off_2pa_share_eb",
+    "opp_allowed_3pa_share_eb"
+  ],
+  "selected_models": {
+    "propensity": "xgb",
+    "outcome": "xgb",
+    "tau": "xgb"
+  },
+  "nuisance_best_prop": {
+    "max_depth": 2,
+    "learning_rate": 0.03,
+    "min_child_weight": 5,
+    "subsample": 0.9,
+    "colsample_bytree": 0.9,
+    "reg_lambda": 5,
+    "reg_alpha": 0.5,
+    "gamma": 0,
+    "n_estimators": 5000
+  },
+  "nuisance_best_outcome": {
+    "max_depth": 4,
+    "learning_rate": 0.1,
+    "min_child_weight": 20,
+    "subsample": 0.7,
+    "colsample_bytree": 0.9,
+    "reg_lambda": 5,
+    "reg_alpha": 0.0,
+    "gamma": 1,
+    "n_estimators": 5000
+  },
+  "tau_best_params": {
+    "max_depth": 4,
+    "learning_rate": 0.05,
+    "min_child_weight": 20,
+    "subsample": 0.7,
+    "colsample_bytree": 0.9,
+    "reg_lambda": 30,
+    "reg_alpha": 0.0,
+    "gamma": 1,
+    "n_estimators": 8000
+  },
+  "oof_scheme": "season_loso",
+  "inner_split_count": 5,
+  "inner_splits": [
+    {
+      "train_start": 2000,
+      "train_end": 2009,
+      "test_start": 2010,
+      "test_end": 2012
+    },
+    {
+      "train_start": 2000,
+      "train_end": 2012,
+      "test_start": 2013,
+      "test_end": 2015
+    },
+    {
+      "train_start": 2000,
+      "train_end": 2015,
+      "test_start": 2016,
+      "test_end": 2018
+    },
+    {
+      "train_start": 2000,
+      "train_end": 2018,
+      "test_start": 2019,
+      "test_end": 2021
+    },
+    {
+      "train_start": 2000,
+      "train_end": 2021,
+      "test_start": 2022,
+      "test_end": 2024
+    }
+  ],
+  "early_stopping": true,
+  "nuisance_oos_path": "results/full_data_xgb_state_fixed_loso/nuisance_oos_train.parquet",
+  "tau_oos_path": "results/full_data_xgb_state_fixed_loso/tau_oos_train.parquet",
+  "blp_metrics": {
+    "blp_alpha": 9.521090708315909e-05,
+    "blp_beta": 0.7380520880246034,
+    "blp_r2": 0.0008112351912666904,
+    "blp_alpha_se": 0.0004884230087119034,
+    "blp_beta_se": 0.08478529462276181,
+    "blp_alpha_ci_lo": -0.0008620805992128645,
+    "blp_alpha_ci_hi": 0.0010525024133791827,
+    "blp_beta_ci_lo": 0.5718759641453728,
+    "blp_beta_ci_hi": 0.9042282119038341,
+    "blp_cov_type": "cluster",
+    "blp_n": 325791.0,
+    "blp_n_cluster": 20730.0
+  },
+  "blp_metrics_path": "results/full_data_xgb_state_fixed_loso/blp_metrics_full_data.json"
+}

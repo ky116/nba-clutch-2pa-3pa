@@ -1,0 +1,2 @@
+n_rows_in_window,n_cells,n_nonzero_cells,zero_cell_ratio,min_nonzero_count,median_nonzero_count,max_count,median_nonzero_density,max_density
+276575,525,525,0.0,139,508.0,1969,46.84444444444444,175.0222222222222

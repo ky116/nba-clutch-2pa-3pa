@@ -41,6 +41,7 @@ FINAL_ES_TAIL_SPAN="${FINAL_ES_TAIL_SPAN:-3}"
 USE_FIXED_HPARAMS="${USE_FIXED_HPARAMS:-1}"
 AUTO_EXPORT_FIXED_HPARAMS="${AUTO_EXPORT_FIXED_HPARAMS:-1}"
 AUTO_SUBMIT_ENSEMBLE_OOS="${AUTO_SUBMIT_ENSEMBLE_OOS:-1}"
+AUTO_SUBMIT_FIGURES="${AUTO_SUBMIT_FIGURES:-0}"
 
 CPU_THREADS="${CPU_THREADS:-32}"
 CPU_MEM="${CPU_MEM:-96G}"
@@ -67,6 +68,14 @@ WF_ROOT_CAT="${WF_ROOT_CAT:-results/nested_wf_catboost_gpu}"
 WF_ROOT_XGB="${WF_ROOT_XGB:-results/nested_wf_xgb}"
 WF_ROOT_LGBM="${WF_ROOT_LGBM:-results/nested_wf_lgbm}"
 ENSEMBLE_OUTDIR="${ENSEMBLE_OUTDIR:-results/full_data_ensemble_state_fixed_loso}"
+WF_SURFACE_OUTDIR="${WF_SURFACE_OUTDIR:-results/wf_cate_surfaces}"
+FIGURE_SOURCE_DIR="${FIGURE_SOURCE_DIR:-results/figure_source_data}"
+FIGURE_OUTDIR="${FIGURE_OUTDIR:-figures}"
+WP_MODEL_DEPENDENCE_OUTDIR="${WP_MODEL_DEPENDENCE_OUTDIR:-results/wp_calibration/model_dependence_sensitivity}"
+WP_RESIDUAL_DIFF_SURFACE="${WP_RESIDUAL_DIFF_SURFACE:-results/wp_calibration/differential_surface/wp_residual_differential_calibration_surface.csv}"
+FIGURE_THREADS="${FIGURE_THREADS:-8}"
+FIGURE_MEM="${FIGURE_MEM:-32G}"
+FIGURE_TIME="${FIGURE_TIME:-24:00:00}"
 mkdir -p "${PROJECT_DIR}/logs"
 FULL_DATA_SLURM_SCRIPT="${PROJECT_DIR}/scripts/slurm/run_full_data_slurm.sh"
 FULL_DATA_ENSEMBLE_SLURM_SCRIPT="${PROJECT_DIR}/scripts/slurm/run_full_data_ensemble_oos_slurm.sh"
@@ -181,6 +190,27 @@ submit_ensemble_oos() {
   printf '%s\n' "$out" | awk '/Submitted batch job/ {print $4}' | tail -n 1
 }
 
+submit_figures() {
+  local dep="$1"
+  local out
+  local py_bin="${PYTHON_BIN:-python3}"
+  echo "[5/5] Submit figure assembly (afterok:${dep})" >&2
+  out=$(
+    PROJECT_DIR="$PROJECT_DIR" \
+    sbatch \
+      --dependency="afterok:${dep}" \
+      --job-name=nba_figures \
+      --cpus-per-task="$FIGURE_THREADS" \
+      --mem="$FIGURE_MEM" \
+      --time="$FIGURE_TIME" \
+      --chdir="$PROJECT_DIR" \
+      -o "$PROJECT_DIR/logs/%j.txt" \
+      --wrap "cd '$PROJECT_DIR' && '$py_bin' scripts/helpers/check_reproduction_contracts.py --stage full && '$py_bin' scripts/helpers/rebuild_wf_cate_surfaces_recalibrated.py --outdir '$WF_SURFACE_OUTDIR' --catboost-dir '$WF_ROOT_CAT' --xgb-dir '$WF_ROOT_XGB' --lgbm-dir '$WF_ROOT_LGBM' && '$py_bin' scripts/helpers/summarize_cate_time_window_stability.py --rows '$WF_SURFACE_OUTDIR/outer_fold_ensemble_tau_test_rows.parquet' --outdir '$WF_SURFACE_OUTDIR/time_window_stability' && '$py_bin' scripts/helpers/assemble_manuscript_cate_figures.py --ensemble-dir '$ENSEMBLE_OUTDIR' --wf-dir '$WF_SURFACE_OUTDIR' --figure-source-dir '$FIGURE_SOURCE_DIR' --panel '$INPUT' --outdir '$FIGURE_OUTDIR' && '$py_bin' scripts/helpers/summarize_wp_model_dependence_sensitivity.py --cate-surface '$ENSEMBLE_OUTDIR/full_data_t30_300_cate_surface_equal_weight.csv' --bias-surface '$WP_RESIDUAL_DIFF_SURFACE' --support '$ENSEMBLE_OUTDIR/cate_surface_support/full_data_t30_300_cate_surface_cell_counts.csv' --outdir '$WP_MODEL_DEPENDENCE_OUTDIR' && '$py_bin' scripts/helpers/check_reproduction_contracts.py --stage figures"
+  )
+  echo "$out" >&2
+  printf '%s\n' "$out" | awk '/Submitted batch job/ {print $4}' | tail -n 1
+}
+
 if [[ "$USE_FIXED_HPARAMS" == "1" ]]; then
   if [[ "${AUTO_EXPORT_FIXED_HPARAMS}" == "1" ]]; then
     echo "[prep] Export fixed hyperparameters from WF outputs"
@@ -230,6 +260,7 @@ Common settings:
   use_fixed_hparams=${USE_FIXED_HPARAMS}
   auto_export_fixed_hparams=${AUTO_EXPORT_FIXED_HPARAMS}
   auto_submit_ensemble_oos=${AUTO_SUBMIT_ENSEMBLE_OOS}
+  auto_submit_figures=${AUTO_SUBMIT_FIGURES}
 
 Job IDs:
   catboost=${JOB_CAT}
@@ -243,6 +274,21 @@ cat <<EOF
 Ensemble OOS job:
   ensemble=${JOB_ENSEMBLE}
   outdir=${ENSEMBLE_OUTDIR}
+
+EOF
+fi
+
+JOB_FIGURES=""
+if [[ "${AUTO_SUBMIT_FIGURES}" == "1" ]]; then
+  if [[ -z "${JOB_ENSEMBLE}" ]]; then
+    echo "[error] AUTO_SUBMIT_FIGURES=1 requires AUTO_SUBMIT_ENSEMBLE_OOS=1 and a parsed ensemble job id" >&2
+    exit 1
+  fi
+  JOB_FIGURES="$(submit_figures "${JOB_ENSEMBLE}")"
+  cat <<EOF
+Figure assembly job:
+  figures=${JOB_FIGURES}
+  outdir=${FIGURE_OUTDIR}
 
 EOF
 fi

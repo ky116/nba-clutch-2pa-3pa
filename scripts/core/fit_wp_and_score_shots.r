@@ -157,6 +157,30 @@ start_type_to_dead_ball_indicator <- function(x) {
 build_start_type_group <- function(x) {
   factor(classify_start_type_group(x), levels = c("live_ball", "dead_ball"))
 }
+add_late_close_tail <- function(dt, time_sec = 60, score_abs = 3) {
+  dt[, late_close_tail := as.numeric(
+    is.finite(time_left_game) &
+      is.finite(score_diff) &
+      time_left_game <= as.numeric(time_sec) &
+      abs(score_diff) <= as.numeric(score_abs)
+  )]
+  dt[, late_time_band := fifelse(
+    late_close_tail == 1 & time_left_game <= 30,
+    "t0_30",
+    fifelse(late_close_tail == 1 & time_left_game <= 60, "t30_60", "other")
+  )]
+  dt[, late_time_band := factor(late_time_band, levels = c("other", "t0_30", "t30_60"))]
+}
+late_tail_terms <- function(variant) {
+  if (identical(variant, "none")) return(character())
+  if (identical(variant, "main")) return("late_close_tail")
+  if (identical(variant, "band")) return("late_time_band")
+  if (identical(variant, "score-band")) return(c("late_time_band", "score_diff:late_time_band"))
+  if (identical(variant, "surface")) {
+    return(c("late_close_tail", "ti(score_diff, time_left_game, by=late_close_tail, bs=c('ts','ts'), k=c(6,6), id='tail')"))
+  }
+  stop(sprintf("Unknown late-tail variant: %s", variant))
+}
 season_to_era_from_levels <- function(season, levels_hint = NULL) {
   if (!is.null(levels_hint) && any(levels_hint %in% c("pace_space_early", "modern_3p"))) {
     return(season_to_era4(season))
@@ -231,6 +255,9 @@ detect_model_direction <- function(model_obj) {
   if ("elo_diff_pregame" %in% fm_vars) {
     d[, elo_diff_pregame := 0.0]
   }
+  if ("late_close_tail" %in% fm_vars) {
+    d[, late_close_tail := 0.0]
+  }
   p <- suppressWarnings(as.numeric(predict(model_obj, newdata = d, type = "response")))
   if (length(p) != 2 || any(!is.finite(p))) {
     warning("Could not detect model direction reliably; keep as-is.")
@@ -268,6 +295,9 @@ extract_model_meta <- function(model_obj) {
     uses_home_possession_f = "home_possession_f" %in% vars,
     uses_dead_ball_indicator = "dead_ball_indicator" %in% vars,
     uses_elo_diff_pregame = "elo_diff_pregame" %in% vars,
+    uses_late_close_tail = "late_close_tail" %in% vars,
+    late_tail_time_sec = attr(model_obj, "late_tail_time_sec", exact = TRUE),
+    late_tail_score_abs = attr(model_obj, "late_tail_score_abs", exact = TRUE),
     start_levels = NULL,
     state_type_levels = NULL,
     state_type3_levels = NULL,
@@ -293,6 +323,8 @@ extract_model_meta <- function(model_obj) {
   if (!is.null(model_obj$model) && "home_possession_f" %in% names(model_obj$model)) {
     out$home_possession_f_levels <- levels(model_obj$model$home_possession_f)
   }
+  if (length(out$late_tail_time_sec) == 0L || !is.finite(as.numeric(out$late_tail_time_sec))) out$late_tail_time_sec <- 60
+  if (length(out$late_tail_score_abs) == 0L || !is.finite(as.numeric(out$late_tail_score_abs))) out$late_tail_score_abs <- 3
   out$model_direction <- detect_model_direction(model_obj)
   out$model_is_reversed <- identical(out$model_direction, "away")
   out
@@ -398,6 +430,9 @@ prepare_states_for_model <- function(dt_in, meta, context = "state rows") {
     if (!("start_type" %in% names(dt))) dt[, start_type := "UNKNOWN"]
     dt[, dead_ball_indicator := start_type_to_dead_ball_indicator(start_type)]
   }
+  if (isTRUE(meta$uses_late_close_tail)) {
+    add_late_close_tail(dt, time_sec = meta$late_tail_time_sec, score_abs = meta$late_tail_score_abs)
+  }
   dt
 }
 
@@ -419,6 +454,7 @@ score_states_with_model <- function(dt_in, model_obj, context = "state rows") {
   if (meta$uses_start_type_group) pred_dt[, start_type_group := dt$start_type_group]
   if (meta$uses_home_possession_f) pred_dt[, home_possession_f := dt$home_possession_f]
   if (meta$uses_dead_ball_indicator) pred_dt[, dead_ball_indicator := dt$dead_ball_indicator]
+  if (isTRUE(meta$uses_late_close_tail)) pred_dt[, late_close_tail := dt$late_close_tail]
 
   p <- suppressWarnings(as.numeric(predict(model_obj, newdata = pred_dt, type = "response")))
   p <- clip_prob(p)
@@ -585,6 +621,9 @@ score_shots_with_model <- function(shots_in, model_obj) {
   if (meta$uses_start_type_group) before_dt[, start_type_group := shots$before_start_type_group]
   if (meta$uses_home_possession_f) before_dt[, home_possession_f := shots$before_home_possession_f]
   if (meta$uses_dead_ball_indicator) before_dt[, dead_ball_indicator := shots$before_dead_ball_indicator]
+  if (isTRUE(meta$uses_late_close_tail)) {
+    add_late_close_tail(before_dt, time_sec = meta$late_tail_time_sec, score_abs = meta$late_tail_score_abs)
+  }
 
   shots[, wp_before := predict(model_obj, newdata = before_dt, type = "response")]
   if (meta$model_is_reversed) shots[, wp_before := 1.0 - wp_before]
@@ -642,6 +681,9 @@ score_shots_with_model <- function(shots_in, model_obj) {
     if (meta$uses_start_type_group) next_dt[, start_type_group := shots[idx_pred]$next_start_type_group]
     if (meta$uses_home_possession_f) next_dt[, home_possession_f := shots[idx_pred]$next_home_possession_f]
     if (meta$uses_dead_ball_indicator) next_dt[, dead_ball_indicator := shots[idx_pred]$next_dead_ball_indicator]
+    if (isTRUE(meta$uses_late_close_tail)) {
+      add_late_close_tail(next_dt, time_sec = meta$late_tail_time_sec, score_abs = meta$late_tail_score_abs)
+    }
     shots[idx_pred, wp_next := predict(model_obj, newdata = next_dt, type = "response")]
     if (meta$model_is_reversed) shots[idx_pred, wp_next := 1.0 - wp_next]
   }
@@ -651,6 +693,62 @@ score_shots_with_model <- function(shots_in, model_obj) {
     scored = shots[!term_mask],
     n_terminal = sum(term_mask, na.rm = TRUE),
     n_terminal_kept = sum(has_terminal_wp, na.rm = TRUE)
+  )
+}
+
+protocol_m0_formula <- function(use_elo_base = FALSE, use_late_close_tail = FALSE) {
+  terms <- c(
+    "era",
+    "OT_flag",
+    "home_possession",
+    "s(score_diff, bs='cr', k=15)",
+    "s(time_left_game, bs='cr', k=20)",
+    "ti(score_diff, time_left_game, bs=c('cr','cr'), k=c(12,12))",
+    "ti(score_diff, time_left_game, by=home_possession, bs=c('ts','ts'), k=c(6,6), id='pos')",
+    "state_type",
+    "s(score_diff, state_type3, bs='fs', k=6)",
+    "s(time_left_game, state_type3, bs='fs', k=8)",
+    "start_type_group",
+    "ti(score_diff, time_left_game, by=start_type_group, bs=c('ts','ts'), k=c(5,5), id='st')",
+    "after_off_reb",
+    "ti(score_diff, time_left_game, by=after_off_reb, bs=c('ts','ts'), k=c(5,5), id='orb')"
+  )
+  if (isTRUE(use_elo_base)) {
+    terms <- c(terms, "s(elo_diff_pregame, bs='cr', k=10)")
+  }
+  if (isTRUE(use_late_close_tail)) {
+    terms <- c(terms, "late_close_tail", "ti(score_diff, time_left_game, by=late_close_tail, bs=c('ts','ts'), k=c(6,6), id='tail')")
+  }
+  as.formula(paste("final_home_win ~", paste(terms, collapse = " + ")))
+}
+
+protocol_m0_template_meta <- function(
+  use_elo_base = FALSE,
+  use_late_close_tail = FALSE,
+  late_tail_time_sec = 60,
+  late_tail_score_abs = 3
+) {
+  list(
+    uses_start_type = FALSE,
+    uses_state_type = TRUE,
+    uses_state_type3 = TRUE,
+    uses_after_off_reb = TRUE,
+    uses_era = TRUE,
+    uses_start_type_group = TRUE,
+    uses_home_possession_f = FALSE,
+    uses_dead_ball_indicator = FALSE,
+    uses_elo_diff_pregame = isTRUE(use_elo_base),
+    uses_late_close_tail = isTRUE(use_late_close_tail),
+    late_tail_time_sec = as.numeric(late_tail_time_sec),
+    late_tail_score_abs = as.numeric(late_tail_score_abs),
+    start_levels = NULL,
+    state_type_levels = c("off_reb", "poss_start", "shot_state"),
+    state_type3_levels = c("off_reb", "poss_start", "shot_state"),
+    era_levels = c("modern_3p", "pace_space_early", "post_handcheck_pre3p", "transition_pre2004"),
+    start_group_levels = c("live_ball", "dead_ball"),
+    home_possession_f_levels = NULL,
+    model_direction = "home",
+    model_is_reversed = FALSE
   )
 }
 
@@ -671,6 +769,10 @@ use_start_type_group_smooth <- has_flag("--start-type-group-smooth")
 use_dead_ball_by_surface <- has_flag("--dead-ball-by-surface")
 use_protocol_m0_spec <- has_flag("--protocol-m0-spec")
 use_protocol_m0_elo_base <- has_flag("--protocol-m0-use-elo-base") || (as.integer(get_arg("--use-elo-base", "0")) != 0L)
+use_oof_protocol_m0_template <- has_flag("--oof-template-protocol-m0-spec")
+use_late_close_tail_surface <- has_flag("--late-close-tail-surface")
+late_tail_time_sec <- suppressWarnings(as.numeric(get_arg("--late-tail-time-sec", "60")))
+late_tail_score_abs <- suppressWarnings(as.numeric(get_arg("--late-tail-score-abs", "3")))
 shot_path_override <- get_arg("--shot-path", NULL)
 season_oof_predict <- !has_flag("--no-season-oof-predict")
 season_oof_jobs <- suppressWarnings(as.integer(get_arg("--season-oof-jobs", Sys.getenv("SEASON_OOF_JOBS", "1"))))
@@ -686,6 +788,23 @@ season_oof_platt_subset <- tolower(get_arg("--season-oof-platt-subset", "clutch"
 season_oof_platt_clutch_time_sec <- as.numeric(get_arg("--season-oof-platt-clutch-time-sec", "300"))
 season_oof_platt_clutch_score_diff <- as.numeric(get_arg("--season-oof-platt-clutch-score-diff", "10"))
 season_oof_platt_coef_out <- get_arg("--season-oof-platt-coef-out", "")
+full_out_override <- get_arg("--full-out", NULL)
+wp_out_override <- get_arg("--wp-out", NULL)
+dml_out_override <- get_arg("--dml-out", NULL)
+gam_wp <- NULL
+wp_formula_template <- NULL
+
+if (isTRUE(use_oof_protocol_m0_template)) {
+  if (!isTRUE(season_oof_predict)) {
+    stop("--oof-template-protocol-m0-spec requires season-OOF prediction.")
+  }
+  if (!is.null(model_in)) {
+    stop("Use --oof-template-protocol-m0-spec without --model-in; the point is to avoid a full-data model template.")
+  }
+  if (!isTRUE(use_protocol_m0_spec)) {
+    stop("--oof-template-protocol-m0-spec requires --protocol-m0-spec.")
+  }
+}
 
 # -----------------------------
 # 1) WP学習データ（poss start）読み込み
@@ -693,6 +812,11 @@ season_oof_platt_coef_out <- get_arg("--season-oof-platt-coef-out", "")
 if (!is.null(model_in)) {
   cat("Loading model from:", model_in, "\n")
   gam_wp <- readRDS(model_in)
+} else if (isTRUE(use_oof_protocol_m0_template)) {
+  wp_formula_template <- protocol_m0_formula(use_protocol_m0_elo_base, use_late_close_tail_surface)
+  cat("Using protocol M0 formula template for season-OOF WP inference; no full-data WP model is fit or loaded.\n")
+  cat("OOF template formula:\n")
+  cat(paste(deparse(wp_formula_template), collapse = "\n"), "\n")
 } else {
   if (!is.null(train_path_override)) {
     train_path <- train_path_override
@@ -733,6 +857,13 @@ if (!is.null(model_in)) {
     time_left_game >= 0 & time_left_game <= 2880
   ]
   check_home_away_orientation(dt_train, score_col = "score_diff", y_col = "final_home_win")
+  if (isTRUE(use_late_close_tail_surface)) {
+    add_late_close_tail(dt_train, time_sec = late_tail_time_sec, score_abs = late_tail_score_abs)
+    cat(sprintf(
+      "Using late-close tail surface: time_left_game <= %.1f and abs(score_diff) <= %.1f (rows=%d).\n",
+      late_tail_time_sec, late_tail_score_abs, sum(dt_train$late_close_tail == 1, na.rm = TRUE)
+    ))
+  }
   if (use_protocol_m0_spec) {
     if (!("start_type" %in% names(dt_train))) dt_train[, start_type := "UNKNOWN"]
     if (isTRUE(use_protocol_m0_elo_base)) {
@@ -747,6 +878,10 @@ if (!is.null(model_in)) {
     ensure_after_off_reb(dt_train, context = "train data")
     dt_train[, start_type_group := build_start_type_group(start_type)]
     dt_train[, era := factor(season_to_era4(as.integer(season)))]
+    use_protocol_m0_era_eff <- length(unique(na.omit(dt_train$era))) > 1L
+    if (!isTRUE(use_protocol_m0_era_eff)) {
+      warning("Protocol M0: era has no variation; skipping era term.")
+    }
     cat("Using protocol M0 spec (fit_wp_model.r).\n")
   }
 
@@ -856,13 +991,15 @@ if (!is.null(model_in)) {
   # -----------------------------
   if (use_protocol_m0_spec) {
     terms <- c(
-      "era",
       "OT_flag",
       "home_possession",
       "s(score_diff, bs='cr', k=15)",
       "s(time_left_game, bs='cr', k=20)",
       "ti(score_diff, time_left_game, bs=c('cr','cr'), k=c(12,12))"
     )
+    if (isTRUE(use_protocol_m0_era_eff)) {
+      terms <- c("era", terms)
+    }
     if (length(unique(na.omit(dt_train$home_possession))) > 1) {
       terms <- c(terms, "ti(score_diff, time_left_game, by=home_possession, bs=c('ts','ts'), k=c(6,6), id='pos')")
     } else {
@@ -891,6 +1028,9 @@ if (!is.null(model_in)) {
         stop("Protocol M0 + Elo base requested but elo_diff_pregame missing after preprocessing.")
       }
       terms <- c(terms, "s(elo_diff_pregame, bs='cr', k=10)")
+    }
+    if (isTRUE(use_late_close_tail_surface)) {
+      terms <- c(terms, "late_close_tail", "ti(score_diff, time_left_game, by=late_close_tail, bs=c('ts','ts'), k=c(6,6), id='tail')")
     }
   } else {
     terms <- c("OT_flag", "home_possession")
@@ -926,6 +1066,9 @@ if (!is.null(model_in)) {
     if (use_dead_ball_by_surface_eff) {
       terms <- c(terms, "dead_ball_indicator", "te(score_diff, time_left_game, by = dead_ball_indicator, k = c(10, 10))")
     }
+    if (isTRUE(use_late_close_tail_surface)) {
+      terms <- c(terms, "late_close_tail", "ti(score_diff, time_left_game, by=late_close_tail, bs=c('ts','ts'), k=c(6,6), id='tail')")
+    }
   }
   wp_formula <- as.formula(paste("final_home_win ~", paste(terms, collapse = " + ")))
   cat("Training formula:\n")
@@ -938,6 +1081,10 @@ if (!is.null(model_in)) {
     discrete = TRUE,
     nthreads = bam_nthreads
   )
+  if (isTRUE(use_late_close_tail_surface)) {
+    attr(gam_wp, "late_tail_time_sec") <- late_tail_time_sec
+    attr(gam_wp, "late_tail_score_abs") <- late_tail_score_abs
+  }
   print(summary(gam_wp))
 
   dir.create("models", showWarnings = FALSE)
@@ -945,14 +1092,28 @@ if (!is.null(model_in)) {
   cat("Saved model:", model_out, "\n")
 }
 
-report_model_spec(gam_wp)
-base_meta <- extract_model_meta(gam_wp)
-cat(sprintf("Model direction probe: %s\n", base_meta$model_direction))
-if (isTRUE(base_meta$model_is_reversed)) {
-  warning("Loaded WP model appears to output away-win probability. Auto-converting to home-win via (1-p).")
+if (is.null(gam_wp)) {
+  base_meta <- protocol_m0_template_meta(
+    use_protocol_m0_elo_base,
+    use_late_close_tail_surface,
+    late_tail_time_sec,
+    late_tail_score_abs
+  )
+  cat("Model spec check: using protocol M0 template metadata for OOF refits.\n")
+  cat(sprintf("Model direction probe: %s\n", base_meta$model_direction))
+} else {
+  report_model_spec(gam_wp)
+  base_meta <- extract_model_meta(gam_wp)
+  cat(sprintf("Model direction probe: %s\n", base_meta$model_direction))
+  if (isTRUE(base_meta$model_is_reversed)) {
+    warning("Loaded WP model appears to output away-win probability. Auto-converting to home-win via (1-p).")
+  }
 }
 platt_map <- load_platt_map(platt_coef_csv, calibration = platt_calibration)
 if (!is.null(platt_map)) {
+  if (is.null(gam_wp)) {
+    stop("Platt calibration from a fixed base model is not available with --oof-template-protocol-m0-spec.")
+  }
   cat(sprintf("Platt calibration: %s (alpha=%.6f, beta=%.6f) from %s\n",
               platt_map$calibration, platt_map$alpha, platt_map$beta, platt_map$path))
 }
@@ -1127,9 +1288,17 @@ if (isTRUE(season_oof_predict)) {
     if (!("start_type" %in% names(dt_oof))) dt_oof[, start_type := "UNKNOWN"]
     dt_oof[, dead_ball_indicator := start_type_to_dead_ball_indicator(start_type)]
   }
+  if (isTRUE(base_meta$uses_late_close_tail)) {
+    add_late_close_tail(dt_oof, time_sec = base_meta$late_tail_time_sec, score_abs = base_meta$late_tail_score_abs)
+    cat(sprintf(
+      "OOF train uses late_close_tail: time_left_game <= %.1f and abs(score_diff) <= %.1f (rows=%d).\n",
+      base_meta$late_tail_time_sec, base_meta$late_tail_score_abs, sum(dt_oof$late_close_tail == 1, na.rm = TRUE)
+    ))
+  }
 
   oof_seasons <- sort(unique(as.integer(shots$season)))
   n_oof <- length(oof_seasons)
+  oof_formula <- if (is.null(gam_wp)) wp_formula_template else formula(gam_wp)
   oof_worker <- function(i) {
     s <- oof_seasons[[i]]
     fold_started <- Sys.time()
@@ -1138,6 +1307,9 @@ if (isTRUE(season_oof_predict)) {
     shots_s <- shots[season == s]
     dt_fit <- dt_oof[season != s]
     if (nrow(dt_fit) < 1000L) {
+      if (is.null(gam_wp)) {
+        stop(sprintf("OOF training rows too small for season=%d (n=%d), and no base model is available in template-only mode.", s, nrow(dt_fit)))
+      }
       warning(sprintf("OOF training rows too small for season=%d (n=%d). Using base model.", s, nrow(dt_fit)))
       scored <- score_shots_with_model(shots_s, gam_wp)$scored
       cat(sprintf("  [OOF] done season=%d rows=%d elapsed=%.1f min (base model fallback)\n",
@@ -1146,7 +1318,7 @@ if (isTRUE(season_oof_predict)) {
       return(scored)
     }
     fit_oof <- bam(
-      formula(gam_wp),
+      oof_formula,
       data = dt_fit,
       family = binomial(link = "logit"),
       method = "fREML",
@@ -1174,6 +1346,9 @@ if (isTRUE(season_oof_predict)) {
   }
   shots <- rbindlist(scored_parts, use.names = TRUE, fill = TRUE)
 } else {
+  if (is.null(gam_wp)) {
+    stop("Single-model prediction requires a fitted or loaded model; disable --oof-template-protocol-m0-spec.")
+  }
   cat("Season-OOF WP inference: OFF (single model prediction)\n")
   shots <- score_shots_with_model(shots, gam_wp)$scored
 }
@@ -1188,6 +1363,9 @@ if (isTRUE(season_oof_platt)) {
   }
   if (isTRUE(season_oof_predict)) {
     warning("season-OOF Platt is being applied after season-OOF WP inference. This mixes fold-specific base predictions with a fixed-base Platt fit path unless you intentionally matched them.")
+  }
+  if (is.null(gam_wp)) {
+    stop("Season-OOF Platt is not available with --oof-template-protocol-m0-spec because no fixed base model is loaded.")
   }
   if (is.null(season_oof_platt_fit_path) || identical(season_oof_platt_fit_path, "")) {
     season_oof_platt_fit_path <- sprintf("data/wp/wp_states_%d_%d_po.csv.gz", start_season, end_season)
@@ -1301,6 +1479,9 @@ if ("shot_sequence" %in% names(shots)) out_full[, shot_sequence := shots$shot_se
 
 full_path <- sprintf("data/wp/shot_decision_states_%d_%d_%s_with_wp_full.csv.gz",
                      start_season, end_season, seasontype)
+if (!is.null(full_out_override) && !identical(full_out_override, "")) {
+  full_path <- full_out_override
+}
 fwrite(out_full, full_path, compress = "gzip")
 cat("Saved FULL (debug) output to:", full_path, "rows=", nrow(out_full), "\n")
 
@@ -1323,6 +1504,9 @@ if ("seasontype" %in% names(shots)) out_wp[, seasontype := shots$seasontype]
 
 wp_path <- sprintf("data/wp/shot_decision_states_%d_%d_%s_with_wp.csv.gz",
                    start_season, end_season, seasontype)
+if (!is.null(wp_out_override) && !identical(wp_out_override, "")) {
+  wp_path <- wp_out_override
+}
 fwrite(out_wp, wp_path, compress = "gzip")
 cat("Saved WP output to:", wp_path, "rows=", nrow(out_wp), "\n")
 
@@ -1352,6 +1536,9 @@ if ("seasontype" %in% names(shots)) out_dml[, seasontype := shots$seasontype]
 
 dml_path <- sprintf("data/wp/shot_decision_panel_%d_%d_%s_dml.csv.gz",
                     start_season, end_season, seasontype)
+if (!is.null(dml_out_override) && !identical(dml_out_override, "")) {
+  dml_path <- dml_out_override
+}
 fwrite(out_dml, dml_path, compress = "gzip")
 cat("Saved DML-ready output to:", dml_path, "rows=", nrow(out_dml), "\n")
 

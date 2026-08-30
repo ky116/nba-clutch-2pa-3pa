@@ -55,12 +55,12 @@ CATE_PREFIX="${CATE_PREFIX:-full_data_}"
 CATE_BOOTSTRAP="${CATE_BOOTSTRAP:-1000}"
 CATE_N_SAMPLE="${CATE_N_SAMPLE:-0}"
 CATE_SPLIT_BY_TIME="${CATE_SPLIT_BY_TIME:-1}"
-CATE_TIME_LONG_LO="${CATE_TIME_LONG_LO:-15}"
+CATE_TIME_LONG_LO="${CATE_TIME_LONG_LO:-30}"
 CATE_TIME_LONG_HI="${CATE_TIME_LONG_HI:-300}"
 CATE_TIME_SHORT_LO="${CATE_TIME_SHORT_LO:-0}"
-CATE_TIME_SHORT_HI="${CATE_TIME_SHORT_HI:-15}"
+CATE_TIME_SHORT_HI="${CATE_TIME_SHORT_HI:-30}"
 CATE_N_TIME_LONG="${CATE_N_TIME_LONG:-25}"
-CATE_N_TIME_SHORT="${CATE_N_TIME_SHORT:-16}"
+CATE_N_TIME_SHORT="${CATE_N_TIME_SHORT:-31}"
 APPLY_TAU_CALIBRATION_TO_CATE="${APPLY_TAU_CALIBRATION_TO_CATE:-1}"
 TAU_CALIBRATION_AUTO_DECIDE="${TAU_CALIBRATION_AUTO_DECIDE:-1}"
 TAU_CALIBRATION_BETA_GAP_THRESHOLD="${TAU_CALIBRATION_BETA_GAP_THRESHOLD:-0.1}"
@@ -325,43 +325,63 @@ if [[ "${RUN_CATE_SURFACE}" == "1" ]]; then
   fi
 
   if [[ "${CATE_SPLIT_BY_TIME}" == "1" ]]; then
-    echo "Running CATE surface plot (time range: ${CATE_TIME_LONG_LO}-${CATE_TIME_LONG_HI})"
-    python3 "${PROJECT_DIR}/scripts/core/plot_cate_surface_gcomp.py" \
-      --input "${DATA_PATH}" \
-      --dr-model "${DR_MODEL_PATH}" \
-      --outdir "${OUTDIR}" \
-      --prefix "${CATE_PREFIX}t15_300_" \
-      --treat-a "${TREAT_A}" \
-      --treat-b "${TREAT_B}" \
-      --time-lo "${CATE_TIME_LONG_LO}" \
-      --time-hi "${CATE_TIME_LONG_HI}" \
-      --score-lo -10 \
-      --score-hi 10 \
-      --n-time "${CATE_N_TIME_LONG}" \
-      --n-sample "${CATE_N_SAMPLE}" \
-      --bootstrap "${CATE_BOOTSTRAP}" \
-      "${CATE_CALIB_ARGS[@]}" \
-      --plot \
-      --plot-sig-mask
+    if [[ "${CATE_BOOTSTRAP}" == "0" ]]; then
+      echo "Running CATE surface plots in one combined grid pass (time ranges: ${CATE_TIME_LONG_LO}-${CATE_TIME_LONG_HI}, ${CATE_TIME_SHORT_LO}-${CATE_TIME_SHORT_HI})"
+      python3 "${PROJECT_DIR}/scripts/core/plot_cate_surface_gcomp_windows.py" \
+        --input "${DATA_PATH}" \
+        --dr-model "${DR_MODEL_PATH}" \
+        --outdir "${OUTDIR}" \
+        --prefix "${CATE_PREFIX}" \
+        --treat-a "${TREAT_A}" \
+        --treat-b "${TREAT_B}" \
+        --long-name "t30_300" \
+        --long-time-lo "${CATE_TIME_LONG_LO}" \
+        --long-time-hi "${CATE_TIME_LONG_HI}" \
+        --long-n-time "${CATE_N_TIME_LONG}" \
+        --short-name "t0_30" \
+        --short-time-lo "${CATE_TIME_SHORT_LO}" \
+        --short-time-hi "${CATE_TIME_SHORT_HI}" \
+        --short-n-time "${CATE_N_TIME_SHORT}" \
+        --score-lo -10 \
+        --score-hi 10 \
+        --n-sample "${CATE_N_SAMPLE}" \
+        --bootstrap "${CATE_BOOTSTRAP}" \
+        "${CATE_CALIB_ARGS[@]}"
+    else
+      echo "Running CATE surface plot (time range: ${CATE_TIME_LONG_LO}-${CATE_TIME_LONG_HI})"
+      python3 "${PROJECT_DIR}/scripts/core/plot_cate_surface_gcomp.py" \
+        --input "${DATA_PATH}" \
+        --dr-model "${DR_MODEL_PATH}" \
+        --outdir "${OUTDIR}" \
+        --prefix "${CATE_PREFIX}t30_300_" \
+        --treat-a "${TREAT_A}" \
+        --treat-b "${TREAT_B}" \
+        --time-lo "${CATE_TIME_LONG_LO}" \
+        --time-hi "${CATE_TIME_LONG_HI}" \
+        --score-lo -10 \
+        --score-hi 10 \
+        --n-time "${CATE_N_TIME_LONG}" \
+        --n-sample "${CATE_N_SAMPLE}" \
+        --bootstrap "${CATE_BOOTSTRAP}" \
+        "${CATE_CALIB_ARGS[@]}"
 
-    echo "Running CATE surface plot (time range: ${CATE_TIME_SHORT_LO}-${CATE_TIME_SHORT_HI})"
-    python3 "${PROJECT_DIR}/scripts/core/plot_cate_surface_gcomp.py" \
-      --input "${DATA_PATH}" \
-      --dr-model "${DR_MODEL_PATH}" \
-      --outdir "${OUTDIR}" \
-      --prefix "${CATE_PREFIX}t0_15_" \
-      --treat-a "${TREAT_A}" \
-      --treat-b "${TREAT_B}" \
-      --time-lo "${CATE_TIME_SHORT_LO}" \
-      --time-hi "${CATE_TIME_SHORT_HI}" \
-      --score-lo -10 \
-      --score-hi 10 \
-      --n-time "${CATE_N_TIME_SHORT}" \
-      --n-sample "${CATE_N_SAMPLE}" \
-      --bootstrap "${CATE_BOOTSTRAP}" \
-      "${CATE_CALIB_ARGS[@]}" \
-      --plot \
-      --plot-sig-mask
+      echo "Running CATE surface plot (time range: ${CATE_TIME_SHORT_LO}-${CATE_TIME_SHORT_HI})"
+      python3 "${PROJECT_DIR}/scripts/core/plot_cate_surface_gcomp.py" \
+        --input "${DATA_PATH}" \
+        --dr-model "${DR_MODEL_PATH}" \
+        --outdir "${OUTDIR}" \
+        --prefix "${CATE_PREFIX}t0_30_" \
+        --treat-a "${TREAT_A}" \
+        --treat-b "${TREAT_B}" \
+        --time-lo "${CATE_TIME_SHORT_LO}" \
+        --time-hi "${CATE_TIME_SHORT_HI}" \
+        --score-lo -10 \
+        --score-hi 10 \
+        --n-time "${CATE_N_TIME_SHORT}" \
+        --n-sample "${CATE_N_SAMPLE}" \
+        --bootstrap "${CATE_BOOTSTRAP}" \
+        "${CATE_CALIB_ARGS[@]}"
+    fi
   else
     echo "Running CATE surface plot (single range)"
     python3 "${PROJECT_DIR}/scripts/core/plot_cate_surface_gcomp.py" \
@@ -375,9 +395,7 @@ if [[ "${RUN_CATE_SURFACE}" == "1" ]]; then
       --score-hi 10 \
       --n-sample "${CATE_N_SAMPLE}" \
       --bootstrap "${CATE_BOOTSTRAP}" \
-      "${CATE_CALIB_ARGS[@]}" \
-      --plot \
-      --plot-sig-mask
+      "${CATE_CALIB_ARGS[@]}"
   fi
 fi
 

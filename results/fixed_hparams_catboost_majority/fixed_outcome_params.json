@@ -1,0 +1,8 @@
+{
+  "depth": 8,
+  "learning_rate": 0.03,
+  "l2_leaf_reg": 30,
+  "min_data_in_leaf": 150,
+  "iterations": 6000,
+  "od_wait": 200
+}

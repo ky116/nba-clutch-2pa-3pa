@@ -1,0 +1,115 @@
+{
+  "outer_split": {
+    "train_start": 2000,
+    "train_end": 2018,
+    "test_start": 2019,
+    "test_end": 2021
+  },
+  "inner_splits": [
+    {
+      "train_start": 2000,
+      "train_end": 2003,
+      "test_start": 2004,
+      "test_end": 2006
+    },
+    {
+      "train_start": 2000,
+      "train_end": 2006,
+      "test_start": 2007,
+      "test_end": 2009
+    },
+    {
+      "train_start": 2000,
+      "train_end": 2009,
+      "test_start": 2010,
+      "test_end": 2012
+    },
+    {
+      "train_start": 2000,
+      "train_end": 2012,
+      "test_start": 2013,
+      "test_end": 2015
+    },
+    {
+      "train_start": 2000,
+      "train_end": 2015,
+      "test_start": 2016,
+      "test_end": 2018
+    }
+  ],
+  "feature_cols": [
+    "time_left_game",
+    "score_diff",
+    "OT_flag",
+    "start_type",
+    "start_type_group",
+    "after_off_reb",
+    "elo_diff",
+    "before_home_possession",
+    "era",
+    "own_fouls_period",
+    "opp_fouls_period",
+    "timeouts_left_us",
+    "timeouts_left_them",
+    "own_allowed_2p_pct_eb",
+    "own_allowed_3p_pct_eb",
+    "own_off_2p_pct_eb",
+    "own_off_3p_pct_eb",
+    "own_off_3pa_share_eb",
+    "own_off_2pa_share_eb",
+    "own_allowed_3pa_share_eb",
+    "opp_allowed_2p_pct_eb",
+    "opp_allowed_3p_pct_eb",
+    "opp_off_2p_pct_eb",
+    "opp_off_3p_pct_eb",
+    "opp_off_3pa_share_eb",
+    "opp_off_2pa_share_eb",
+    "opp_allowed_3pa_share_eb"
+  ],
+  "treatment_scheme": "binary",
+  "cluster_col": "GAME_ID",
+  "nuisance_best_prop": {
+    "depth": 8,
+    "learning_rate": 0.03,
+    "l2_leaf_reg": 30,
+    "min_data_in_leaf": 50,
+    "iterations": 6000,
+    "od_wait": 200
+  },
+  "nuisance_best_outcome": {
+    "depth": 8,
+    "learning_rate": 0.03,
+    "l2_leaf_reg": 30,
+    "min_data_in_leaf": 150,
+    "iterations": 6000,
+    "od_wait": 200
+  },
+  "tau_best_params": {
+    "depth": 6,
+    "learning_rate": 0.03,
+    "l2_leaf_reg": 30,
+    "min_data_in_leaf": 100,
+    "iterations": 8000,
+    "od_wait": 300
+  },
+  "selected_models": {
+    "propensity": "catboost",
+    "outcome": "catboost",
+    "tau": "catboost"
+  },
+  "blp_metrics": {
+    "blp_alpha": -0.0004982475086895477,
+    "blp_beta": 1.1730588707946148,
+    "blp_r2": 0.00335685942313535,
+    "blp_alpha_se": 0.0005799158751261358,
+    "blp_beta_se": 0.0797972709075765,
+    "blp_alpha_ci_lo": -0.001634861737999801,
+    "blp_alpha_ci_hi": 0.0006383667206207058,
+    "blp_beta_ci_lo": 1.016659093751179,
+    "blp_beta_ci_hi": 1.3294586478380506,
+    "blp_cov_type": "cluster",
+    "blp_n": 253112.0,
+    "blp_n_cluster": 16122.0
+  },
+  "blp_metrics_path": "results/nested_wf_catboost_gpu/train2000_2018_test2019_2021/blp_metrics_oos_train.json"
+}

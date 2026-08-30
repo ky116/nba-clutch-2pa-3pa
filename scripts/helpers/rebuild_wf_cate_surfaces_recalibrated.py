@@ -235,10 +235,9 @@ def plot_surface(surface: pd.DataFrame, out_path: Path, title: str, min_n: int) 
         )
         test_years = str(cur["test_years"].iloc[0])
         ax.set_title(test_years)
-        ax.set_xlabel("score_diff_offense")
         ax.set_xticks(np.arange(int(pivot.columns.min()), int(pivot.columns.max()) + 1, 5))
-    axes[0].set_ylabel("time_left_game")
-    fig.suptitle(f"{title} (BLP-recalibrated, shown cells n >= {min_n})")
+    axes[0].set_ylabel("Time remaining (seconds)")
+    fig.supxlabel("Score differential (offense perspective)", y=0.02)
     if im is not None:
         fig.colorbar(im, ax=axes, label="Recalibrated CATE", shrink=0.82)
     fig.savefig(out_path, dpi=160, bbox_inches="tight")
@@ -258,12 +257,10 @@ def main() -> None:
     rows.to_parquet(outdir / "outer_fold_ensemble_tau_test_rows.parquet", index=False)
     summarize_rows(rows).to_csv(outdir / "outer_fold_ensemble_cate_surface_summary.csv", index=False)
 
-    surface_15_300 = aggregate_surface(rows, "15--300s", 15, 300, 15, 20, args.score_lo, args.score_hi)
-    surface_0_15 = aggregate_surface(rows, "0--15s", 0, 15, 3, 10, args.score_lo, args.score_hi)
-    surface_15_300.to_csv(outdir / "outer_fold_ensemble_cate_surface_15_300.csv", index=False)
-    surface_0_15.to_csv(outdir / "outer_fold_ensemble_cate_surface_0_15.csv", index=False)
-    plot_surface(surface_15_300, outdir / "outer_fold_ensemble_cate_surface_15_300.png", "WF outer-fold ensemble CATE surface, 15-300s", 20)
-    plot_surface(surface_0_15, outdir / "outer_fold_ensemble_cate_surface_0_15.png", "WF outer-fold ensemble CATE surface, 0-15s", 10)
+    surface_30_300 = aggregate_surface(rows, "30--300s", 30, 300, 15, 20, args.score_lo, args.score_hi)
+    surface_0_30 = aggregate_surface(rows, "0--30s", 0, 30, 3, 10, args.score_lo, args.score_hi)
+    surface_30_300.to_csv(outdir / "outer_fold_ensemble_cate_surface_30_300.csv", index=False)
+    surface_0_30.to_csv(outdir / "outer_fold_ensemble_cate_surface_0_30.csv", index=False)
 
     readme = outdir / "README.md"
     readme.write_text(
@@ -280,10 +277,8 @@ Construction:
 
 Files:
 - `outer_fold_ensemble_tau_test_rows.parquet`: row-level held-out predictions with model-specific raw/calibrated tau and ensemble calibrated tau.
-- `outer_fold_ensemble_cate_surface_15_300.csv`: 15-300s cell source data, 15-second bins, shown cells require n >= 20.
-- `outer_fold_ensemble_cate_surface_0_15.csv`: 0-15s diagnostic cell source data, 3-second bins, shown cells require n >= 10.
-- `outer_fold_ensemble_cate_surface_15_300.png`: five-panel held-out surface for the main 15-300s region.
-- `outer_fold_ensemble_cate_surface_0_15.png`: five-panel held-out surface for the terminal-adjacent diagnostic region.
+- `outer_fold_ensemble_cate_surface_30_300.csv`: 30-300s primary cell source data, 15-second bins, shown cells require n >= 20.
+- `outer_fold_ensemble_cate_surface_0_30.csv`: 0-30s late-clock validity / separate-regime diagnostic cell source data, 3-second bins, shown cells require n >= 10.
 - `outer_fold_ensemble_cate_surface_summary.csv`: fold-level summary of row-level calibrated ensemble tau.
 
 Outer folds: train2000_2009_test2010_2012, train2000_2012_test2013_2015, train2000_2015_test2016_2018, train2000_2018_test2019_2021, train2000_2021_test2022_2024

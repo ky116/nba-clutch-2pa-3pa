@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render the exact right panel of the 0–15 second observed ΔWP surface."""
+"""Render the exact right panel of the 0-30 second observed delta-WP surface."""
 
 from pathlib import Path
 
@@ -10,18 +10,18 @@ import pandas as pd
 
 INPUT = Path(
     "results/late_clock_diagnostics/shot_level_delta_wp_distribution/"
-    "observed_delta_wp_surface_t0_15.csv"
+    "observed_delta_wp_surface_t0_30.csv"
 )
 OUTPUT = Path(
     "results/late_clock_diagnostics/shot_level_delta_wp_distribution/"
-    "observed_delta_wp_difference_3p_minus_2p_t0_15_exact.png"
+    "observed_delta_wp_difference_3p_minus_2p_t0_30_exact.png"
 )
 OUTPUT_PDF = OUTPUT.with_suffix(".pdf")
 
 
 def main() -> None:
     data = pd.read_csv(INPUT)
-    times = np.arange(0, 16)
+    times = np.arange(0, 31)
     scores = np.arange(-10, 11)
     shown = data.copy()
     shown.loc[
@@ -46,7 +46,7 @@ def main() -> None:
         origin="lower",
         aspect="auto",
         interpolation="nearest",
-        extent=[-10.5, 10.5, -0.5, 15.5],
+        extent=[-10.5, 10.5, -0.5, 30.5],
         cmap=cmap,
         vmin=-0.2,
         vmax=0.2,
@@ -59,7 +59,7 @@ def main() -> None:
     ax.set_xlabel("Score differential (offense perspective)", fontsize=14)
     ax.set_ylabel("Seconds remaining", fontsize=14)
     ax.set_xticks(np.arange(-10, 11, 2))
-    ax.set_yticks(np.arange(0, 16, 3))
+    ax.set_yticks(np.arange(0, 31, 5))
     ax.tick_params(labelsize=12)
 
     fig.tight_layout()

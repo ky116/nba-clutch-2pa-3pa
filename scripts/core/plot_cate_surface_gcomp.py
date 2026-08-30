@@ -139,6 +139,8 @@ def compute_surface(
     bootstrap: int,
     tau_calib_alpha: Optional[float],
     tau_calib_beta: Optional[float],
+    time_grid_override: Optional[np.ndarray] = None,
+    score_grid_override: Optional[np.ndarray] = None,
 ) -> Tuple[pd.DataFrame, np.ndarray, np.ndarray]:
     feat_cols = payload.get("feature_cols")
     if not feat_cols:
@@ -156,12 +158,16 @@ def compute_surface(
         X = X_all.reset_index(drop=True)
 
     # Build grid (use quantiles by default)
-    if time_lo is not None and time_hi is not None:
+    if time_grid_override is not None:
+        time_grid = np.asarray(time_grid_override, dtype=np.float32)
+    elif time_lo is not None and time_hi is not None:
         time_grid = _grid_from_bounds(X_all[time_col].to_numpy(), lo=time_lo, hi=time_hi, n=n_time, round_int=False)
     else:
         time_grid = _grid_from_quantiles(X_all[time_col].to_numpy(), qlo=qlo, qhi=qhi, n=n_time, round_int=False)
     score_base = X_all[score_col].to_numpy()
-    if score_lo is not None and score_hi is not None:
+    if score_grid_override is not None:
+        score_grid = np.asarray(score_grid_override, dtype=np.float32)
+    elif score_lo is not None and score_hi is not None:
         score_grid = _grid_from_bounds(score_base, lo=score_lo, hi=score_hi, n=n_score, round_int=True)
     else:
         score_grid = _grid_from_quantiles(score_base, qlo=qlo, qhi=qhi, n=n_score, round_int=True)

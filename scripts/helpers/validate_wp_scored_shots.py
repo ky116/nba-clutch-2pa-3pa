@@ -131,7 +131,7 @@ def summarize_panel(path: Path) -> None:
     print("[panel]")
     print(f"  path: {path}")
     print(f"  rows: {len(df):,}")
-    for col in ("season", "shot_zone_choice", "delta_wp", "time_left_game", "score_diff"):
+    for col in ("season", "shot_zone_choice", "delta_wp", "time_left_game", "score_diff", "elo_diff"):
         if col not in df.columns:
             raise SystemExit(f"[error] panel missing required column: {col}")
 
@@ -140,6 +140,10 @@ def summarize_panel(path: Path) -> None:
     region = time_left.le(15) & score_diff.gt(-5) & score_diff.le(-2)
     print(f"  seasons: {int(df['season'].min())}-{int(df['season'].max())}")
     print(f"  choices: {df['shot_zone_choice'].value_counts(dropna=False).to_dict()}")
+    elo_nonnull = int(pd.to_numeric(df["elo_diff"], errors="coerce").notna().sum())
+    print(f"  elo_diff non-null: {elo_nonnull:,} / {len(df):,}")
+    if elo_nonnull == 0:
+        raise SystemExit("[error] panel elo_diff is entirely missing")
     print("  problem region: time_left_game <= 15 and -5 < score_diff <= -2")
     print(f"    rows: {int(region.sum()):,}")
     print(f"    rows by choice: {df.loc[region, 'shot_zone_choice'].value_counts(dropna=False).to_dict()}")

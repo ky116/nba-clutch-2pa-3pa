@@ -14,20 +14,38 @@ regular-season CATE manuscript workflow.
 
 ## Current Rerun Path
 
+Top-level entry:
+
+```sh
+bash scripts/pipelines/run_reproduction_release.sh --check-inputs
+bash scripts/pipelines/run_reproduction_release.sh --through validate
+bash scripts/pipelines/run_reproduction_release.sh --submit-slurm --from panel --through figures
+```
+
+Manual stage entries:
+
 1. `scripts/pipelines/run_rs_m0_k0_shot_panel.sh`
 
-   Server/Slurm entry: `scripts/slurm/run_rs_m0_k0_shot_panel_slurm.sh`.
+   Default rerun mode uses `OOF_TEMPLATE_PROTOCOL_M0=1`: season-held-out WP
+   models are refit from the protocol M0 formula, without fitting or loading a
+   full-data WP model as the OOF template.
+   Server/Slurm entry: `sbatch scripts/slurm/run_rs_m0_k0_shot_panel_slurm.sh`.
    Strict season-OOF scoring is parallelized with `SEASON_OOF_JOBS` and `BAM_NTHREADS`; keep `SEASON_OOF_JOBS * BAM_NTHREADS <= THREADS`.
 2. `scripts/helpers/validate_wp_scored_shots.py`
 
    Post-run validation for the teacher signal. It checks that terminal shot rows are retained with `wp_next = final_home_win`, that `delta_wp = wp_next - wp_before`, and that the late 3/4-point trailing region has visible row and treatment counts.
 3. `scripts/pipelines/run_nested_walk_forward_catboost.sh`
-4. `scripts/pipelines/run_nested_walk_forward_xgb_lgbm.sh`
-5. `scripts/pipelines/run_full_data_pipeline.sh`
-6. `scripts/helpers/rebuild_wf_cate_surfaces_recalibrated.py`
-7. `scripts/helpers/assemble_manuscript_cate_figures.py`
+4. `scripts/slurm/run_nested_walk_forward_xgb_slurm.sh`
+5. `scripts/slurm/run_nested_walk_forward_lgbm_slurm.sh`
+6. `scripts/pipelines/run_full_data_pipeline.sh`
+7. `scripts/helpers/rebuild_wf_cate_surfaces_recalibrated.py`
+8. `scripts/helpers/assemble_manuscript_cate_figures.py`
 
-For direct non-Slurm reruns, `scripts/pipelines/rerun_rs_panel_and_validate.sh` runs steps 1 and 2 in sequence. On the server, prefer submitting the Slurm wrapper first, then running the validator after the job completes.
+Use `scripts/helpers/check_reproduction_contracts.py` after any long-running
+stage to verify that the outputs satisfy the downstream file/column contracts
+before submitting the next stage.
+
+For direct non-Slurm reruns, `scripts/pipelines/rerun_rs_panel_and_validate.sh` runs steps 1 and 2 in sequence. On the server, submit the Slurm wrapper with `sbatch` first, then run the validator after the job completes.
 
 ## Expected Outputs
 

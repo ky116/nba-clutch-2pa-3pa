@@ -128,6 +128,30 @@ start_type_to_dead_ball_indicator <- function(x) {
 build_start_type_group <- function(x) {
   factor(classify_start_type_group(x), levels = c("live_ball", "dead_ball"))
 }
+add_late_close_tail <- function(dt, time_sec = 60, score_abs = 3) {
+  dt[, late_close_tail := as.numeric(
+    is.finite(time_left_game) &
+      is.finite(score_diff) &
+      time_left_game <= as.numeric(time_sec) &
+      abs(score_diff) <= as.numeric(score_abs)
+  )]
+  dt[, late_time_band := fifelse(
+    late_close_tail == 1 & time_left_game <= 30,
+    "t0_30",
+    fifelse(late_close_tail == 1 & time_left_game <= 60, "t30_60", "other")
+  )]
+  dt[, late_time_band := factor(late_time_band, levels = c("other", "t0_30", "t30_60"))]
+}
+late_tail_terms <- function(variant) {
+  if (identical(variant, "none")) return(character())
+  if (identical(variant, "main")) return("late_close_tail")
+  if (identical(variant, "band")) return("late_time_band")
+  if (identical(variant, "score-band")) return(c("late_time_band", "score_diff:late_time_band"))
+  if (identical(variant, "surface")) {
+    return(c("late_close_tail", "ti(score_diff, time_left_game, by=late_close_tail, bs=c('ts','ts'), k=c(6,6), id='tail')"))
+  }
+  stop(sprintf("Unknown late-tail variant: %s", variant))
+}
 check_home_away_orientation <- function(dt, score_col = "score_diff", y_col = "final_home_win") {
   ok <- dt[!is.na(get(score_col)) & !is.na(get(y_col))]
   if (nrow(ok) < 1000L) {
@@ -196,6 +220,12 @@ detect_model_direction <- function(model_obj) {
   if ("elo_diff_pregame" %in% fm_vars) {
     d[, elo_diff_pregame := 0.0]
   }
+  if ("late_close_tail" %in% fm_vars) {
+    d[, late_close_tail := 0.0]
+  }
+  if ("late_time_band" %in% fm_vars) {
+    d[, late_time_band := factor("other", levels = c("other", "t0_30", "t30_60"))]
+  }
   p <- suppressWarnings(as.numeric(predict(model_obj, newdata = d, type = "response")))
   if (length(p) != 2 || any(!is.finite(p))) return("unknown")
   if (p[2] > p[1]) return("home")
@@ -235,6 +265,14 @@ use_era_te_by_surface <- has_flag("--era-te-by-surface")
 use_protocol_m0_spec <- has_flag("--protocol-m0-spec")
 use_elo_pregame <- has_flag("--use-elo-pregame")
 elo_k_target <- suppressWarnings(as.numeric(get_arg("--elo-k-target", "NA")))
+late_tail_variant <- tolower(get_arg("--late-tail-variant", "none"))
+if (has_flag("--late-close-tail-surface")) late_tail_variant <- "surface"
+if (!(late_tail_variant %in% c("none", "main", "band", "score-band", "surface"))) {
+  stop("--late-tail-variant must be one of: none, main, band, score-band, surface")
+}
+use_late_close_tail_surface <- !identical(late_tail_variant, "none")
+late_tail_time_sec <- suppressWarnings(as.numeric(get_arg("--late-tail-time-sec", "60")))
+late_tail_score_abs <- suppressWarnings(as.numeric(get_arg("--late-tail-score-abs", "3")))
 
 if (!is.null(train_path_override)) {
   train_path <- train_path_override
@@ -288,12 +326,23 @@ if (use_elo_pregame) {
   }
 }
 check_home_away_orientation(dt_train, score_col = "score_diff", y_col = "final_home_win")
+if (use_late_close_tail_surface) {
+  add_late_close_tail(dt_train, time_sec = late_tail_time_sec, score_abs = late_tail_score_abs)
+  cat(sprintf(
+    "Using late-tail variant=%s: time_left_game <= %.1f and abs(score_diff) <= %.1f (rows=%d).\n",
+    late_tail_variant, late_tail_time_sec, late_tail_score_abs, sum(dt_train$late_close_tail == 1, na.rm = TRUE)
+  ))
+}
 
 if (use_protocol_m0_spec) {
   if (!("start_type" %in% names(dt_train))) dt_train[, start_type := "UNKNOWN"]
   ensure_after_off_reb(dt_train, context = "train data")
   dt_train[, start_type_group := build_start_type_group(start_type)]
   dt_train[, era := factor(season_to_era4(as.integer(season)))]
+  use_protocol_m0_era_eff <- length(unique(na.omit(dt_train$era))) > 1L
+  if (!isTRUE(use_protocol_m0_era_eff)) {
+    warning("Protocol M0: era has no variation; skipping era term.")
+  }
   cat("Using protocol M0 spec (fit_wp_model.r).\n")
 }
 
@@ -400,13 +449,15 @@ cat("Training rows:", nrow(dt_train), "\n")
 
 if (use_protocol_m0_spec) {
   terms <- c(
-    "era",
     "OT_flag",
     "home_possession",
     "s(score_diff, bs='cr', k=15)",
     "s(time_left_game, bs='cr', k=20)",
     "ti(score_diff, time_left_game, bs=c('cr','cr'), k=c(12,12))"
   )
+  if (isTRUE(use_protocol_m0_era_eff)) {
+    terms <- c("era", terms)
+  }
   if (length(unique(na.omit(dt_train$home_possession))) > 1) {
     terms <- c(terms, "ti(score_diff, time_left_game, by=home_possession, bs=c('ts','ts'), k=c(6,6), id='pos')")
   } else {
@@ -433,6 +484,7 @@ if (use_protocol_m0_spec) {
   if (isTRUE(use_elo_pregame_eff)) {
     terms <- c(terms, "s(elo_diff_pregame, bs='cr', k=10)")
   }
+  terms <- c(terms, late_tail_terms(late_tail_variant))
 } else {
   terms <- c("OT_flag", "home_possession")
   if (use_home_possession_by_surface_eff) {
@@ -474,6 +526,7 @@ if (use_protocol_m0_spec) {
   if (use_dead_ball_by_surface_eff) {
     terms <- c(terms, "dead_ball_indicator", "te(score_diff, time_left_game, by = dead_ball_indicator, k = c(10, 10))")
   }
+  terms <- c(terms, late_tail_terms(late_tail_variant))
 }
 wp_formula <- as.formula(paste("final_home_win ~", paste(terms, collapse = " + ")))
 cat("Training formula:\n")
@@ -486,6 +539,11 @@ gam_wp <- bam(
   method = "fREML",
   discrete = TRUE
 )
+if (isTRUE(use_late_close_tail_surface)) {
+  attr(gam_wp, "late_tail_time_sec") <- late_tail_time_sec
+  attr(gam_wp, "late_tail_score_abs") <- late_tail_score_abs
+  attr(gam_wp, "late_tail_variant") <- late_tail_variant
+}
 print(summary(gam_wp))
 report_model_spec(gam_wp)
 dir_probe <- detect_model_direction(gam_wp)

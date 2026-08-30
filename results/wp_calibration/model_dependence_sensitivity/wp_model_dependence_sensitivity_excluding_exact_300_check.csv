@@ -1,0 +1,3 @@
+subset,n_cells,sign_flip_share,mean_abs_difference
+30_300_including_exact_300,375,0.184,0.010308032259502033
+30_lt300_excluding_exact_300,360,0.1638888888888889,0.009691509045824017

@@ -1,6 +1,11 @@
 # Local environments
 .venv/
 .r_libs_*/
+.rlib/
+.agents/
+.codex/
+AGENTS.md
+RUN_STATUS.md
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -36,7 +41,22 @@ models/*
 # Generated analysis outputs are excluded by default.
 results/*
 !results/.gitkeep
-appendix_terminal_fix_20260616_bundle/
+# Keep lightweight, human-readable result tables and summaries for review and
+# manuscript reproduction; large parquet/model artifacts remain excluded.
+!results/**/
+!results/**/*.csv
+!results/**/*.json
+!results/**/*.txt
+results/**/*.parquet
+results/**/*.joblib
+results/**/*.rds
+results/**/*.gz
+results/**/*.md
+results/**/*.png
+results/**/*.jpg
+results/**/*.jpeg
+results/**/*.pdf
+!results/README.md
 
 # Temporary and local scratch files
 .joblib/

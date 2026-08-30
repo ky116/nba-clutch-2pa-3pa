@@ -1,0 +1,2 @@
+with_wp,target,orientation,exclude_terminal_next,min_time,max_time,score_abs,start_season,end_season,n,mean_pred,empirical_win_rate,bias,brier,log_loss,ece,mce,calibration_intercept,calibration_slope
+results/wp_tail_surface_experiment_2020_2024/shot_decision_states_2020_2024_rs_with_wp_tail_abs7_single.csv.gz,next,home,True,,,,,,1064470,0.551050237627538,0.5512715247963775,-0.00022128716883951238,0.16963922446939972,0.4991793987689047,0.002852638791421517,0.006514670074068418,0.002806581501054078,0.989721537992027

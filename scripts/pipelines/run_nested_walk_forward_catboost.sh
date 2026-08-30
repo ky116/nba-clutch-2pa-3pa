@@ -60,11 +60,6 @@ MAX_PROP="${MAX_PROP:-1.0}"
 TREAT_A="${TREAT_A:-three-point}"
 TREAT_B="${TREAT_B:-two-point}"
 TREATMENT_SCHEME="${TREATMENT_SCHEME:-binary}"
-ENABLE_STAGEWISE="${ENABLE_STAGEWISE:-1}"
-PROP_CANDIDATES="${PROP_CANDIDATES:-xgb,lgbm,catboost}"
-OUTCOME_CANDIDATES="${OUTCOME_CANDIDATES:-xgb,lgbm,catboost}"
-TAU_CANDIDATES="${TAU_CANDIDATES:-xgb,lgbm,catboost}"
-SELECTION_TAIL_SPAN="${SELECTION_TAIL_SPAN:-3}"
 
 mkdir -p logs
 
@@ -132,13 +127,6 @@ echo "Python site-packages: ${PYTHON_SITE:-<none>}"
 echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES-UNSET}"
 echo "CATBOOST_USE_GPU=${CATBOOST_USE_GPU}"
 echo "CATBOOST_DEVICES=${CATBOOST_DEVICES}"
-echo "ENABLE_STAGEWISE=${ENABLE_STAGEWISE}"
-if [[ "${ENABLE_STAGEWISE}" == "1" ]]; then
-  echo "PROP_CANDIDATES=${PROP_CANDIDATES}"
-  echo "OUTCOME_CANDIDATES=${OUTCOME_CANDIDATES}"
-  echo "TAU_CANDIDATES=${TAU_CANDIDATES}"
-  echo "SELECTION_TAIL_SPAN=${SELECTION_TAIL_SPAN}"
-fi
 nvidia-smi || true
 
 PRECHECK=(
@@ -188,16 +176,6 @@ CMD=(
 if [[ -n "$MAX_SEASON" ]]; then
   CMD+=(--max-season "$MAX_SEASON")
 fi
-if [[ "${ENABLE_STAGEWISE}" == "1" ]]; then
-  CMD+=(
-    --stagewise-model-selection
-    --prop-candidates "$PROP_CANDIDATES"
-    --outcome-candidates "$OUTCOME_CANDIDATES"
-    --tau-candidates "$TAU_CANDIDATES"
-    --selection-tail-span "$SELECTION_TAIL_SPAN"
-  )
-fi
-
 # Pass additional CLI args to scripts/core/run_nested_walk_forward.py
 echo "Running: ${CMD[*]} ${EXTRA_ARGS[*]}"
 "${CMD[@]}" "${EXTRA_ARGS[@]}"

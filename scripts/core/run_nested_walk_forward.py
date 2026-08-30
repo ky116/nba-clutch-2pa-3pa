@@ -50,17 +50,6 @@ def _parse_csv_list(s: str, cast=float) -> List:
     return [cast(x.strip()) for x in s.split(",") if x.strip()]
 
 
-def _parse_model_csv(s: str) -> List[str]:
-    allowed = {"xgb", "lgbm", "catboost"}
-    out = [x.strip() for x in s.split(",") if x.strip()]
-    bad = [m for m in out if m not in allowed]
-    if bad:
-        raise ValueError(f"Unknown model names in candidates: {bad}")
-    if not out:
-        raise ValueError("Empty model candidate list.")
-    return out
-
-
 def _catboost_use_gpu() -> bool:
     return str(os.getenv("CATBOOST_USE_GPU", "0")).strip() == "1"
 
@@ -171,14 +160,6 @@ def iter_inner_splits(
             break
         yield SplitRange(train_start, train_end, test_start, test_end)
         train_end += step
-
-
-def _tail_selection_block(df_train: pd.DataFrame, season_col: str = "season", tail_span: int = 3) -> pd.DataFrame:
-    if tail_span <= 0:
-        return df_train.iloc[0:0].copy()
-    seasons = sorted(pd.unique(df_train[season_col]))
-    tail = seasons[-int(tail_span) :]
-    return df_train[df_train[season_col].isin(tail)].copy()
 
 
 def _expand_grid(grid: Dict[str, List[Any]]) -> List[Dict[str, Any]]:
@@ -316,6 +297,8 @@ class FittedNuisance:
     treat_levels: List[Any]
     cat_cols: List[str]
     pre: Optional[ColumnTransformer]
+    prop_model_name: str
+    outcome_model_name: str
     prop_model: Optional[Any]
     prop_fallback: Optional[np.ndarray]
     outcome_models: Dict[int, Optional[Any]]
@@ -383,7 +366,8 @@ def _fit_classifier_with_es(
             return est.fit(
                 X_train,
                 y_train,
-                eval_set=[(X_eval, y_eval)],
+                eval_X=X_eval,
+                eval_y=y_eval,
                 callbacks=[
                     lgb.early_stopping(es_rounds, verbose=False),
                     lgb.log_evaluation(period=0),
@@ -443,7 +427,8 @@ def _fit_regressor_with_es(
             return est.fit(
                 X_train,
                 y_train,
-                eval_set=[(X_eval, y_eval)],
+                eval_X=X_eval,
+                eval_y=y_eval,
                 callbacks=[
                     lgb.early_stopping(es_rounds, verbose=False),
                     lgb.log_evaluation(period=0),
@@ -726,6 +711,8 @@ def fit_nuisance(
         treat_levels=list(treat_levels),
         cat_cols=cat_cols,
         pre=pre,
+        prop_model_name=config.prop_model,
+        outcome_model_name=config.outcome_model,
         prop_model=prop_model,
         prop_fallback=prop_fallback,
         outcome_models=outcome_models,
@@ -755,11 +742,13 @@ def predict_nuisance(
     else:
         if fitted.prop_model is None:
             raise RuntimeError("prop_model missing with no fallback.")
-        if fitted.pre is None:
-            prob = fitted.prop_model.predict_proba(X_df)
-        else:
+        if fitted.prop_model_name in {"xgb", "lgbm"}:
+            if fitted.pre is None:
+                raise RuntimeError("Encoded features are missing for XGB/LGBM.")
             X_enc = fitted.pre.transform(X_df)
             prob = fitted.prop_model.predict_proba(X_enc)
+        else:
+            prob = fitted.prop_model.predict_proba(X_df)
         prob = np.asarray(prob, dtype=np.float32)
         prob = np.clip(prob, 1e-6, 1.0)
         prob = prob / prob.sum(axis=1, keepdims=True)
@@ -771,11 +760,13 @@ def predict_nuisance(
         if mdl is None:
             m_hat[:, k] = np.float32(fitted.outcome_fallback.get(k, 0.0))
             continue
-        if fitted.pre is None:
-            pred = mdl.predict(X_df)
-        else:
+        if fitted.outcome_model_name in {"xgb", "lgbm"}:
+            if fitted.pre is None:
+                raise RuntimeError("Encoded features are missing for XGB/LGBM.")
             X_enc = fitted.pre.transform(X_df)
             pred = mdl.predict(X_enc)
+        else:
+            pred = mdl.predict(X_df)
         m_hat[:, k] = np.asarray(pred, dtype=np.float32)
 
     return m_hat, e_hat
@@ -944,190 +935,6 @@ def tune_nuisance_walk_forward(
     df_out["task"] = "outcome"
     df_all = pd.concat([df_prop, df_out], ignore_index=True)
     return best_prop, best_out, df_all
-
-
-def tune_propensity_only_walk_forward(
-    df: pd.DataFrame,
-    splits: List[SplitRange],
-    feature_cols: List[str],
-    treat_col: str,
-    outcome_col: str,
-    prop_model: str,
-    outcome_model_for_fit: str,
-    random_state: int,
-    min_samples_per_treat: int,
-    prop_grid: Dict[str, List[Any]],
-    enable_early_stopping: bool,
-    es_rounds: int,
-    group_col: Optional[str] = None,
-) -> Tuple[Dict[str, Any], pd.DataFrame]:
-    treat_levels = df[treat_col].astype("category").cat.categories.tolist()
-    prop_params_list = _sample_param_candidates(
-        prop_model,
-        _expand_grid(prop_grid),
-        random_state=random_state + 307,
-    )
-    rows = []
-    for params in prop_params_list:
-        losses = []
-        for split in splits:
-            df_tr = df[(df["season"] >= split.train_start) & (df["season"] <= split.train_end)].copy()
-            df_va = df[(df["season"] >= split.test_start) & (df["season"] <= split.test_end)].copy()
-            if df_tr.empty or df_va.empty:
-                continue
-            cfg = DMLConfig(
-                n_splits=2,
-                prop_model=prop_model,
-                outcome_model=outcome_model_for_fit,
-                random_state=random_state,
-                prop_params=dict(params),
-                outcome_params={},
-                min_samples_per_treat=min_samples_per_treat,
-                group_col=group_col,
-            )
-            fitted = fit_nuisance(
-                df_tr,
-                feature_cols,
-                treat_col,
-                outcome_col,
-                cfg,
-                treat_levels=treat_levels,
-                df_eval=df_va if enable_early_stopping else None,
-                es_rounds=es_rounds,
-            )
-            m_hat, e_hat = predict_nuisance(fitted, df_va, feature_cols)
-            prop_loss, _ = score_nuisance(df_va, m_hat, e_hat, treat_col, outcome_col, treat_levels)
-            if np.isfinite(prop_loss):
-                losses.append(prop_loss)
-        if losses:
-            rows.append(dict(params=params, mean_log_loss=float(np.mean(losses))))
-    out = pd.DataFrame(rows).sort_values("mean_log_loss", ascending=True)
-    best = dict(out.iloc[0]["params"]) if not out.empty else {}
-    return best, out
-
-
-def tune_outcome_only_walk_forward(
-    df: pd.DataFrame,
-    splits: List[SplitRange],
-    feature_cols: List[str],
-    treat_col: str,
-    outcome_col: str,
-    prop_model: str,
-    fixed_prop_params: Dict[str, Any],
-    outcome_model: str,
-    random_state: int,
-    min_samples_per_treat: int,
-    outcome_grid: Dict[str, List[Any]],
-    enable_early_stopping: bool,
-    es_rounds: int,
-    group_col: Optional[str] = None,
-) -> Tuple[Dict[str, Any], pd.DataFrame]:
-    treat_levels = df[treat_col].astype("category").cat.categories.tolist()
-    outcome_params_list = _sample_param_candidates(
-        outcome_model,
-        _expand_grid(outcome_grid),
-        random_state=random_state + 401,
-    )
-    rows = []
-    for params in outcome_params_list:
-        mse_losses = []
-        rmse_losses = []
-        mae_losses = []
-        for split in splits:
-            df_tr = df[(df["season"] >= split.train_start) & (df["season"] <= split.train_end)].copy()
-            df_va = df[(df["season"] >= split.test_start) & (df["season"] <= split.test_end)].copy()
-            if df_tr.empty or df_va.empty:
-                continue
-            cfg = DMLConfig(
-                n_splits=2,
-                prop_model=prop_model,
-                outcome_model=outcome_model,
-                random_state=random_state,
-                prop_params=dict(fixed_prop_params),
-                outcome_params=dict(params),
-                min_samples_per_treat=min_samples_per_treat,
-                group_col=group_col,
-            )
-            fitted = fit_nuisance(
-                df_tr,
-                feature_cols,
-                treat_col,
-                outcome_col,
-                cfg,
-                treat_levels=treat_levels,
-                df_eval=df_va if enable_early_stopping else None,
-                es_rounds=es_rounds,
-            )
-            m_hat, e_hat = predict_nuisance(fitted, df_va, feature_cols)
-            _, out_mse = score_nuisance(df_va, m_hat, e_hat, treat_col, outcome_col, treat_levels)
-            if not np.isfinite(out_mse):
-                continue
-            z_va = _align_treat_codes(df_va, treat_col, treat_levels)
-            keep = z_va >= 0
-            if not np.any(keep):
-                continue
-            row_idx = np.where(keep)[0]
-            y_true = df_va[outcome_col].to_numpy(dtype=np.float32)[keep]
-            y_pred = np.asarray(m_hat[row_idx, z_va[keep]], dtype=np.float32)
-            mse_losses.append(out_mse)
-            rmse_losses.append(float(np.sqrt(out_mse)))
-            mae_losses.append(float(mean_absolute_error(y_true, y_pred)))
-        if mse_losses:
-            rows.append(
-                dict(
-                    params=params,
-                    mean_mse=float(np.mean(mse_losses)),
-                    mean_rmse=float(np.mean(rmse_losses)),
-                    mean_mae=float(np.mean(mae_losses)),
-                )
-            )
-    out = pd.DataFrame(rows).sort_values(["mean_rmse", "mean_mae"], ascending=[True, True])
-    best = dict(out.iloc[0]["params"]) if not out.empty else {}
-    return best, out
-
-
-def evaluate_propensity_stability(
-    df_test_n: pd.DataFrame,
-    treat_col: str,
-    outcome_col: str,
-    treat_levels: List[Any],
-) -> Dict[str, float]:
-    z = _align_treat_codes(df_test_n, treat_col, treat_levels)
-    y = df_test_n[outcome_col].to_numpy(dtype=float)
-    keep = z >= 0
-    if not np.any(keep):
-        return dict(
-            prop_logloss=np.nan,
-            extreme_rate=np.nan,
-            ipw_var=np.nan,
-            outcome_rmse=np.nan,
-            outcome_mae=np.nan,
-            n_test=0.0,
-        )
-    z = z[keep]
-    y = y[keep]
-    row_idx = np.where(keep)[0]
-    K = len(treat_levels)
-    e_hat = np.column_stack([df_test_n[f"e_hat_{lvl}"].to_numpy(dtype=float) for lvl in treat_levels])[row_idx, :]
-    e_hat = np.clip(e_hat, 1e-6, 1.0)
-    e_hat = e_hat / e_hat.sum(axis=1, keepdims=True)
-
-    prop_logloss = float(log_loss(z, e_hat, labels=list(range(K))))
-    obs_e = e_hat[np.arange(len(z)), z]
-    extreme_pct = float(np.mean((obs_e < 0.01) | (obs_e > 0.99)))
-    ipw_var = float(np.var(1.0 / np.clip(obs_e, 1e-6, 1.0)))
-    m_hat = np.column_stack([df_test_n[f"m_hat_{lvl}"].to_numpy(dtype=float) for lvl in treat_levels])[row_idx, :]
-    y_pred = m_hat[np.arange(len(y)), z]
-    out_rmse = float(np.sqrt(mean_squared_error(y, y_pred)))
-    out_mae = float(np.mean(np.abs(y - y_pred)))
-    return dict(
-        prop_logloss=prop_logloss,
-        extreme_rate=extreme_pct,
-        ipw_var=ipw_var,
-        outcome_rmse=out_rmse,
-        outcome_mae=out_mae,
-        n_test=float(len(y)),
-    )
 
 
 def compute_dr_r_losses(
@@ -1760,394 +1567,6 @@ def fit_tau_full(
     return out, payload
 
 
-@dataclass
-class StagewiseSelection:
-    prop_model: str
-    prop_params: Dict[str, Any]
-    outcome_model: str
-    outcome_params: Dict[str, Any]
-    tau_model: str
-    tau_params: Dict[str, Any]
-    diagnostics: pd.DataFrame
-    tuning_tables: Dict[str, pd.DataFrame]
-
-
-def select_models_stagewise_on_outer(
-    df_train: pd.DataFrame,
-    df_test: pd.DataFrame,
-    df_selection: Optional[pd.DataFrame],
-    inner_splits: List[SplitRange],
-    feature_cols: List[str],
-    treat_col: str,
-    outcome_col: str,
-    treat_a: str,
-    treat_b: str,
-    prop_candidates: List[str],
-    outcome_candidates: List[str],
-    tau_candidates: List[str],
-    random_state: int,
-    min_samples_per_treat: int,
-    min_prop: float,
-    max_prop: float,
-    enable_early_stopping: bool,
-    es_rounds: int,
-    final_es_tail_span: int,
-    cluster_col: Optional[str],
-) -> StagewiseSelection:
-    rows: List[Dict[str, Any]] = []
-    tuning_tables: Dict[str, pd.DataFrame] = {}
-    treat_levels = df_train[treat_col].astype("category").cat.categories.tolist()
-    df_eval = df_selection if (df_selection is not None and len(df_selection) > 0) else df_test
-    use_oos_eval = df_selection is not None and len(df_selection) > 0
-    eval_seasons = np.sort(df_eval["season"].dropna().astype(int).unique())
-    eval_start = int(eval_seasons.min()) if len(eval_seasons) else np.nan
-    eval_end = int(eval_seasons.max()) if len(eval_seasons) else np.nan
-
-    def _sanitize_eval_nuisance(df_in: pd.DataFrame, stage_tag: str) -> pd.DataFrame:
-        df_out = df_in.copy()
-        need_num = [outcome_col]
-        for lvl in treat_levels:
-            need_num.append(f"m_hat_{lvl}")
-            need_num.append(f"e_hat_{lvl}")
-        mask = np.ones(len(df_out), dtype=bool)
-        for c in need_num:
-            mask &= np.isfinite(pd.to_numeric(df_out[c], errors="coerce").to_numpy(dtype=float))
-        mask &= df_out[treat_col].astype(str).isin([str(x) for x in treat_levels]).to_numpy()
-        if cluster_col and cluster_col in df_out.columns:
-            mask &= pd.notna(df_out[cluster_col]).to_numpy()
-        dropped = int((~mask).sum())
-        if dropped > 0:
-            _log_progress(f"stagewise {stage_tag}: dropped invalid eval rows={dropped:,}")
-        df_out = df_out.loc[mask].copy()
-        if df_out.empty:
-            raise ValueError(f"stagewise {stage_tag}: no valid rows left after OOS sanitization.")
-        return df_out
-
-    def _build_eval_nuisance(cfg: DMLConfig, stage_tag: str) -> pd.DataFrame:
-        if use_oos_eval:
-            df_eval_oos, _ = _collect_nuisance_oos(
-                df=df_train,
-                splits=inner_splits,
-                feature_cols=feature_cols,
-                treat_col=treat_col,
-                outcome_col=outcome_col,
-                config=cfg,
-                enable_early_stopping=enable_early_stopping,
-                es_rounds=es_rounds,
-            )
-            df_eval_n = df_eval_oos.loc[df_eval.index].copy()
-            return _sanitize_eval_nuisance(df_eval_n, stage_tag=stage_tag)
-        return fit_nuisance_full(
-            df_train,
-            df_eval,
-            feature_cols,
-            treat_col,
-            outcome_col,
-            cfg,
-            enable_early_stopping=enable_early_stopping,
-            es_rounds=es_rounds,
-            final_es_tail_span=final_es_tail_span,
-        )
-
-    # Stage E: choose propensity model by stability on selection window
-    e_rows = []
-    for model in prop_candidates:
-        best_prop, prop_tune_df = tune_propensity_only_walk_forward(
-            df_train,
-            inner_splits,
-            feature_cols,
-            treat_col,
-            outcome_col,
-            prop_model=model,
-            outcome_model_for_fit=model,
-            random_state=random_state,
-            min_samples_per_treat=min_samples_per_treat,
-            prop_grid=_default_prop_grid(model),
-            enable_early_stopping=enable_early_stopping,
-            es_rounds=es_rounds,
-            group_col=cluster_col,
-        )
-        tuning_tables[f"stageE_prop_{model}"] = prop_tune_df.copy()
-        cfg = DMLConfig(
-            n_splits=2,
-            prop_model=model,
-            outcome_model=model,
-            random_state=random_state,
-            prop_params=best_prop,
-            outcome_params={},
-            min_samples_per_treat=min_samples_per_treat,
-            group_col=cluster_col,
-        )
-        df_eval_n = _build_eval_nuisance(cfg, stage_tag=f"E/{model}")
-        met = evaluate_propensity_stability(df_eval_n, treat_col, outcome_col, treat_levels)
-        row = dict(
-            stage="E",
-            model=model,
-            params=json.dumps(best_prop, ensure_ascii=False),
-            eval_start=eval_start,
-            eval_end=eval_end,
-            **met,
-        )
-        e_rows.append(row)
-        rows.append(row)
-    df_e = pd.DataFrame(e_rows).sort_values(
-        ["extreme_rate", "ipw_var", "prop_logloss"], ascending=[True, True, True]
-    )
-    best_e = df_e.iloc[0]
-    best_prop_model = str(best_e["model"])
-    best_prop_params = json.loads(str(best_e["params"]))
-
-    # Stage M: choose outcome model under fixed e*
-    m_rows = []
-    for model in outcome_candidates:
-        best_out, out_tune_df = tune_outcome_only_walk_forward(
-            df_train,
-            inner_splits,
-            feature_cols,
-            treat_col,
-            outcome_col,
-            prop_model=best_prop_model,
-            fixed_prop_params=best_prop_params,
-            outcome_model=model,
-            random_state=random_state,
-            min_samples_per_treat=min_samples_per_treat,
-            outcome_grid=_default_prop_grid(model),
-            enable_early_stopping=enable_early_stopping,
-            es_rounds=es_rounds,
-            group_col=cluster_col,
-        )
-        tuning_tables[f"stageM_outcome_{model}"] = out_tune_df.copy()
-        cfg = DMLConfig(
-            n_splits=2,
-            prop_model=best_prop_model,
-            outcome_model=model,
-            random_state=random_state,
-            prop_params=best_prop_params,
-            outcome_params=best_out,
-            min_samples_per_treat=min_samples_per_treat,
-            group_col=cluster_col,
-        )
-        df_eval_n = _build_eval_nuisance(cfg, stage_tag=f"M/{model}")
-        met = evaluate_propensity_stability(df_eval_n, treat_col, outcome_col, treat_levels)
-        tau_plugin = (
-            df_eval_n[f"m_hat_{treat_a}"].to_numpy(dtype=float)
-            - df_eval_n[f"m_hat_{treat_b}"].to_numpy(dtype=float)
-        )
-        tau_losses = compute_dr_r_losses(
-            df_eval_n,
-            treat_col=treat_col,
-            outcome_col=outcome_col,
-            treat_a=treat_a,
-            treat_b=treat_b,
-            tau_hat=tau_plugin,
-            min_prop=min_prop,
-        )
-        row = dict(
-            stage="M",
-            model=model,
-            params=json.dumps(best_out, ensure_ascii=False),
-            eval_start=eval_start,
-            eval_end=eval_end,
-            **met,
-            **tau_losses,
-        )
-        m_rows.append(row)
-        rows.append(row)
-    # Stage M selection:
-    # main: DR-loss / R-loss
-    # auxiliary: RMSE / MAE
-    df_m = pd.DataFrame(m_rows).sort_values(
-        ["dr_loss", "r_loss", "outcome_rmse", "outcome_mae"],
-        ascending=[True, True, True, True],
-    )
-    best_m = df_m.iloc[0]
-    best_outcome_model = str(best_m["model"])
-    best_outcome_params = json.loads(str(best_m["params"]))
-
-    # fixed nuisance for tau stage evaluation on selection window
-    nuisance_cfg = DMLConfig(
-        n_splits=2,
-        prop_model=best_prop_model,
-        outcome_model=best_outcome_model,
-        random_state=random_state,
-        prop_params=best_prop_params,
-        outcome_params=best_outcome_params,
-        min_samples_per_treat=min_samples_per_treat,
-        group_col=cluster_col,
-    )
-    if use_oos_eval:
-        df_train_full = fit_nuisance_full(
-            df_train,
-            df_train,
-            feature_cols,
-            treat_col,
-            outcome_col,
-            nuisance_cfg,
-            enable_early_stopping=enable_early_stopping,
-            es_rounds=es_rounds,
-            final_es_tail_span=final_es_tail_span,
-        )
-        df_eval_full = _build_eval_nuisance(nuisance_cfg, stage_tag="Tau/fixed_nuisance")
-    else:
-        df_train_full = fit_nuisance_full(
-            df_train,
-            df_train,
-            feature_cols,
-            treat_col,
-            outcome_col,
-            nuisance_cfg,
-            enable_early_stopping=enable_early_stopping,
-            es_rounds=es_rounds,
-            final_es_tail_span=final_es_tail_span,
-        )
-        df_eval_full = fit_nuisance_full(
-            df_train,
-            df_eval,
-            feature_cols,
-            treat_col,
-            outcome_col,
-            nuisance_cfg,
-            enable_early_stopping=enable_early_stopping,
-            es_rounds=es_rounds,
-            final_es_tail_span=final_es_tail_span,
-        )
-
-    # Stage Tau: choose tau model by selection-window CATE diagnostics
-    t_rows = []
-    for model in tau_candidates:
-        best_tau, tau_tune_df = tune_tau_walk_forward(
-            inner_splits,
-            df_train,
-            feature_cols,
-            treat_col,
-            outcome_col,
-            model,
-            random_state,
-            nuisance_cfg,
-            _default_tau_grid(model),
-            min_prop,
-            max_prop,
-            enable_early_stopping=enable_early_stopping,
-            es_rounds=es_rounds,
-            final_es_tail_span=final_es_tail_span,
-        )
-        tuning_tables[f"stageTau_tau_{model}"] = tau_tune_df.copy()
-        if use_oos_eval:
-            df_tau_oos = make_tau_oos(
-                df=df_train,
-                splits=inner_splits,
-                feature_cols=feature_cols,
-                treat_col=treat_col,
-                outcome_col=outcome_col,
-                nuisance_cfg=nuisance_cfg,
-                tau_model=model,
-                tau_params=best_tau,
-                min_prop=min_prop,
-                max_prop=max_prop,
-                treat_a=treat_a,
-                treat_b=treat_b,
-                enable_early_stopping=enable_early_stopping,
-                es_rounds=es_rounds,
-                final_es_tail_span=final_es_tail_span,
-            )
-            df_eval_tau = df_eval_full.copy()
-            df_eval_tau["tau_hat"] = df_tau_oos.loc[df_eval_tau.index, "tau_hat"].to_numpy(dtype=float)
-            tau_mask = np.isfinite(pd.to_numeric(df_eval_tau["tau_hat"], errors="coerce").to_numpy(dtype=float))
-            dropped_tau = int((~tau_mask).sum())
-            if dropped_tau > 0:
-                _log_progress(f"stagewise Tau/{model}: dropped rows without OOS tau={dropped_tau:,}")
-            df_eval_tau = df_eval_tau.loc[tau_mask].copy()
-            if df_eval_tau.empty:
-                raise ValueError(f"stagewise Tau/{model}: no valid rows after tau OOS filtering.")
-        else:
-            df_eval_tau, _ = fit_tau_full(
-                df_train_full,
-                df_eval_full,
-                feature_cols,
-                treat_col,
-                outcome_col,
-                model,
-                best_tau,
-                min_prop,
-                max_prop,
-                treat_a,
-                treat_b,
-                random_state=random_state,
-                enable_early_stopping=enable_early_stopping,
-                es_rounds=es_rounds,
-                final_es_tail_span=final_es_tail_span,
-            )
-        y = df_eval_tau[outcome_col].to_numpy(dtype=float)
-        z = df_eval_tau[treat_col].astype("category").to_numpy()
-        m_a = df_eval_tau[f"m_hat_{treat_a}"].to_numpy(dtype=float)
-        m_b = df_eval_tau[f"m_hat_{treat_b}"].to_numpy(dtype=float)
-        e_a = np.clip(df_eval_tau[f"e_hat_{treat_a}"].to_numpy(dtype=float), min_prop, 1.0)
-        e_b = np.clip(df_eval_tau[f"e_hat_{treat_b}"].to_numpy(dtype=float), min_prop, 1.0)
-        tau_hat = df_eval_tau["tau_hat"].to_numpy(dtype=float)
-        tau_losses = compute_dr_r_losses(
-            df_eval_tau,
-            treat_col=treat_col,
-            outcome_col=outcome_col,
-            treat_a=treat_a,
-            treat_b=treat_b,
-            tau_hat=tau_hat,
-            min_prop=min_prop,
-        )
-        psi_tau = (
-            (m_a - m_b)
-            + (z == str(treat_a)).astype(float) * (y - m_a) / e_a
-            - (z == str(treat_b)).astype(float) * (y - m_b) / e_b
-        )
-        cluster_arr = None
-        if cluster_col and (cluster_col in df_eval_tau.columns):
-            cluster_arr = df_eval_tau[cluster_col].to_numpy()
-        blp = _compute_blp_metrics_robust(tau_hat=tau_hat, psi_tau=psi_tau, cluster=cluster_arr)
-        row = dict(
-            stage="tau",
-            model=model,
-            params=json.dumps(best_tau, ensure_ascii=False),
-            eval_start=eval_start,
-            eval_end=eval_end,
-            tau_var=float(np.var(tau_hat)),
-            tau_mean=float(np.mean(tau_hat)),
-            share_tau_positive=float(np.mean(tau_hat > 0.0)),
-            **tau_losses,
-            **blp,
-        )
-        t_rows.append(row)
-        rows.append(row)
-    df_t = pd.DataFrame(t_rows)
-    # selection keys for tau stage
-    # - better calibration: beta closer to 1, alpha closer to 0
-    # - smaller DR/R-loss and variance are better
-    df_t["blp_beta_gap"] = (df_t["blp_beta"] - 1.0).abs()
-    df_t["blp_alpha_abs"] = df_t["blp_alpha"].abs()
-    df_t = df_t.sort_values(
-        [
-            "blp_beta_gap",
-            "blp_alpha_abs",
-            "dr_loss",
-            "r_loss",
-            "tau_var",
-        ],
-        ascending=[True, True, True, True, True],
-    )
-    best_t = df_t.iloc[0]
-    best_tau_model = str(best_t["model"])
-    best_tau_params = json.loads(str(best_t["params"]))
-
-    return StagewiseSelection(
-        prop_model=best_prop_model,
-        prop_params=best_prop_params,
-        outcome_model=best_outcome_model,
-        outcome_params=best_outcome_params,
-        tau_model=best_tau_model,
-        tau_params=best_tau_params,
-        diagnostics=pd.DataFrame(rows),
-        tuning_tables=tuning_tables,
-    )
-
-
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Nested walk-forward orchestration")
     p.add_argument("--input", required=True, help="panel parquet with season/treat/outcome/features")
@@ -2181,16 +1600,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--disable-early-stopping", action="store_true")
     p.add_argument("--es-rounds", type=int, default=200)
     p.add_argument("--final-es-tail-span", type=int, default=3)
-    p.add_argument("--stagewise-model-selection", action="store_true")
-    p.add_argument("--prop-candidates", type=str, default="xgb,lgbm,catboost")
-    p.add_argument("--outcome-candidates", type=str, default="xgb,lgbm,catboost")
-    p.add_argument("--tau-candidates", type=str, default="xgb,lgbm,catboost")
-    p.add_argument(
-        "--selection-tail-span",
-        type=int,
-        default=3,
-        help="If >0 with stagewise selection, use last N train seasons as selection window instead of outer test.",
-    )
     p.add_argument(
         "--cluster-col",
         type=str,
@@ -2260,9 +1669,6 @@ def main() -> None:
     )
 
     use_early_stopping = not args.disable_early_stopping
-    prop_candidates = _parse_model_csv(args.prop_candidates)
-    outcome_candidates = _parse_model_csv(args.outcome_candidates)
-    tau_candidates = _parse_model_csv(args.tau_candidates)
 
     for outer in outer_splits:
         tag = f"train{outer.train_start}_{outer.train_end}_test{outer.test_start}_{outer.test_end}"
@@ -2289,96 +1695,32 @@ def main() -> None:
         selected_prop_model = args.prop_model
         selected_outcome_model = args.outcome_model
         selected_tau_model = args.tau_model
-        selection_source = "outer_test"
-        df_selection = None
-        selection_window = dict(
-            n_rows=int(len(df_test)),
-            season_start=int(df_test["season"].min()) if not df_test.empty else None,
-            season_end=int(df_test["season"].max()) if not df_test.empty else None,
+
+        # -------------------------
+        # 1) Tune nuisance
+        # -------------------------
+        _log_progress(f"{tag}: nuisance tuning start ({selected_prop_model}/{selected_outcome_model})")
+        prop_grid = _default_prop_grid(selected_prop_model)
+        out_grid = _default_outcome_grid(selected_outcome_model)
+        best_prop, best_out, tune_df = tune_nuisance_walk_forward(
+            df_train,
+            inner_splits,
+            feature_cols,
+            args.treat_col,
+            args.outcome_col,
+            selected_prop_model,
+            selected_outcome_model,
+            args.random_state,
+            args.min_samples_per_treat,
+            prop_grid,
+            out_grid,
+            enable_early_stopping=use_early_stopping,
+            es_rounds=args.es_rounds,
+            group_col=args.cluster_col,
         )
-        if args.stagewise_model_selection and args.selection_tail_span > 0:
-            df_selection = _tail_selection_block(df_train, season_col="season", tail_span=args.selection_tail_span)
-            if not df_selection.empty:
-                selection_source = f"train_tail_{int(args.selection_tail_span)}"
-                selection_window = dict(
-                    n_rows=int(len(df_selection)),
-                    season_start=int(df_selection["season"].min()),
-                    season_end=int(df_selection["season"].max()),
-                )
-            else:
-                selection_source = "outer_test_fallback_empty_tail"
-                df_selection = None
-        if args.stagewise_model_selection:
-            _log_progress(f"{tag}: stagewise model selection start")
-            selection = select_models_stagewise_on_outer(
-                df_train=df_train,
-                df_test=df_test,
-                df_selection=df_selection,
-                inner_splits=inner_splits,
-                feature_cols=feature_cols,
-                treat_col=args.treat_col,
-                outcome_col=args.outcome_col,
-                treat_a=args.treat_a,
-                treat_b=args.treat_b,
-                prop_candidates=prop_candidates,
-                outcome_candidates=outcome_candidates,
-                tau_candidates=tau_candidates,
-                random_state=args.random_state,
-                min_samples_per_treat=args.min_samples_per_treat,
-                min_prop=args.min_prop,
-                max_prop=args.max_prop,
-                enable_early_stopping=use_early_stopping,
-                es_rounds=args.es_rounds,
-                final_es_tail_span=args.final_es_tail_span,
-                cluster_col=args.cluster_col,
-            )
-            selected_prop_model = selection.prop_model
-            selected_outcome_model = selection.outcome_model
-            selected_tau_model = selection.tau_model
-            best_prop = selection.prop_params
-            best_out = selection.outcome_params
-            best_tau = selection.tau_params
-            _log_progress(
-                f"{tag}: stagewise selected prop={selected_prop_model} "
-                f"outcome={selected_outcome_model} tau={selected_tau_model}"
-            )
-            selection_path = out_base / "stagewise_model_selection.csv"
-            selection.diagnostics.to_csv(selection_path, index=False)
-            for name, tbl in selection.tuning_tables.items():
-                tbl_out = tbl.copy()
-                if "params" in tbl_out.columns:
-                    tbl_out["params"] = tbl_out["params"].apply(
-                        lambda x: json.dumps(x, ensure_ascii=False) if isinstance(x, dict) else str(x)
-                    )
-                tbl_out.to_csv(out_base / f"{name}_tuning.csv", index=False)
-            tune_df = pd.DataFrame()
-            tau_tune_df = pd.DataFrame()
-        else:
-            # -------------------------
-            # 1) Tune nuisance
-            # -------------------------
-            _log_progress(f"{tag}: nuisance tuning start ({selected_prop_model}/{selected_outcome_model})")
-            prop_grid = _default_prop_grid(selected_prop_model)
-            out_grid = _default_outcome_grid(selected_outcome_model)
-            best_prop, best_out, tune_df = tune_nuisance_walk_forward(
-                df_train,
-                inner_splits,
-                feature_cols,
-                args.treat_col,
-                args.outcome_col,
-                selected_prop_model,
-                selected_outcome_model,
-                args.random_state,
-                args.min_samples_per_treat,
-                prop_grid,
-                out_grid,
-                enable_early_stopping=use_early_stopping,
-                es_rounds=args.es_rounds,
-                group_col=args.cluster_col,
-            )
-            tune_path = out_base / "nuisance_tuning.csv"
-            tune_df.to_csv(tune_path, index=False)
-            _log_progress(f"{tag}: nuisance tuning done -> {tune_path}")
+        tune_path = out_base / "nuisance_tuning.csv"
+        tune_df.to_csv(tune_path, index=False)
+        _log_progress(f"{tag}: nuisance tuning done -> {tune_path}")
 
         # 2) OOS nuisance within outer train
         _log_progress(f"{tag}: building nuisance OOS (train)")
@@ -2439,28 +1781,27 @@ def main() -> None:
         # -------------------------
         # 4) Tune tau-model
         # -------------------------
-        if not args.stagewise_model_selection:
-            _log_progress(f"{tag}: tau tuning start ({selected_tau_model})")
-            tau_grid = _default_tau_grid(selected_tau_model)
-            best_tau, tau_tune_df = tune_tau_walk_forward(
-                inner_splits,
-                df_train,
-                feature_cols,
-                args.treat_col,
-                args.outcome_col,
-                selected_tau_model,
-                args.random_state,
-                nuisance_cfg,
-                tau_grid,
-                args.min_prop,
-                args.max_prop,
-                enable_early_stopping=use_early_stopping,
-                es_rounds=args.es_rounds,
-                final_es_tail_span=args.final_es_tail_span,
-            )
-            tau_tune_path = out_base / "tau_tuning.csv"
-            tau_tune_df.to_csv(tau_tune_path, index=False)
-            _log_progress(f"{tag}: tau tuning done -> {tau_tune_path}")
+        _log_progress(f"{tag}: tau tuning start ({selected_tau_model})")
+        tau_grid = _default_tau_grid(selected_tau_model)
+        best_tau, tau_tune_df = tune_tau_walk_forward(
+            inner_splits,
+            df_train,
+            feature_cols,
+            args.treat_col,
+            args.outcome_col,
+            selected_tau_model,
+            args.random_state,
+            nuisance_cfg,
+            tau_grid,
+            args.min_prop,
+            args.max_prop,
+            enable_early_stopping=use_early_stopping,
+            es_rounds=args.es_rounds,
+            final_es_tail_span=args.final_es_tail_span,
+        )
+        tau_tune_path = out_base / "tau_tuning.csv"
+        tau_tune_df.to_csv(tau_tune_path, index=False)
+        _log_progress(f"{tag}: tau tuning done -> {tau_tune_path}")
 
         # 5) OOS tau_hat within outer train
         _log_progress(f"{tag}: building tau OOS (train)")
@@ -2579,7 +1920,7 @@ def main() -> None:
                 df_init_tau.index[init_tau_mask], "tau_hat"
             ]
 
-        # 8) BLP diagnostics on outer-train OOS nuisance/tau (always save, regardless of stagewise selection)
+        # 8) BLP diagnostics on outer-train OOS nuisance/tau
         df_blp_oos = df_train_oos.copy()
         df_blp_oos["tau_hat"] = df_train_tau_oos["tau_hat"].to_numpy(dtype=float)
         req_blp_numeric_cols = [
@@ -2650,9 +1991,6 @@ def main() -> None:
             feature_cols=feature_cols,
             treatment_scheme=args.treatment_scheme,
             cluster_col=args.cluster_col,
-            stagewise_selection_source=selection_source if args.stagewise_model_selection else "disabled",
-            selection_tail_span=int(args.selection_tail_span),
-            stagewise_selection_window=selection_window if args.stagewise_model_selection else None,
             nuisance_best_prop=best_prop,
             nuisance_best_outcome=best_out,
             tau_best_params=best_tau,

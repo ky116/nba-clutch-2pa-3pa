@@ -29,7 +29,8 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 cd "${PROJECT_DIR}"
 
 echo "[rerun] step 1/2: rebuild RS m0/k0 shot panel"
-bash scripts/pipelines/run_rs_m0_k0_shot_panel.sh
+OOF_TEMPLATE_PROTOCOL_M0="${OOF_TEMPLATE_PROTOCOL_M0:-1}" \
+  bash scripts/pipelines/run_rs_m0_k0_shot_panel.sh
 
 echo "[rerun] step 2/2: validate scored shots and panel"
 "${PYTHON_BIN}" scripts/helpers/validate_wp_scored_shots.py \

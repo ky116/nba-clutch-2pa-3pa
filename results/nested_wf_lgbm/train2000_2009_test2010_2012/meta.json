@@ -1,0 +1,109 @@
+{
+  "outer_split": {
+    "train_start": 2000,
+    "train_end": 2009,
+    "test_start": 2010,
+    "test_end": 2012
+  },
+  "inner_splits": [
+    {
+      "train_start": 2000,
+      "train_end": 2003,
+      "test_start": 2004,
+      "test_end": 2006
+    },
+    {
+      "train_start": 2000,
+      "train_end": 2006,
+      "test_start": 2007,
+      "test_end": 2009
+    }
+  ],
+  "feature_cols": [
+    "time_left_game",
+    "score_diff",
+    "OT_flag",
+    "start_type",
+    "start_type_group",
+    "after_off_reb",
+    "elo_diff",
+    "before_home_possession",
+    "era",
+    "own_fouls_period",
+    "opp_fouls_period",
+    "timeouts_left_us",
+    "timeouts_left_them",
+    "own_allowed_2p_pct_eb",
+    "own_allowed_3p_pct_eb",
+    "own_off_2p_pct_eb",
+    "own_off_3p_pct_eb",
+    "own_off_3pa_share_eb",
+    "own_off_2pa_share_eb",
+    "own_allowed_3pa_share_eb",
+    "opp_allowed_2p_pct_eb",
+    "opp_allowed_3p_pct_eb",
+    "opp_off_2p_pct_eb",
+    "opp_off_3p_pct_eb",
+    "opp_off_3pa_share_eb",
+    "opp_off_2pa_share_eb",
+    "opp_allowed_3pa_share_eb"
+  ],
+  "treatment_scheme": "binary",
+  "cluster_col": "GAME_ID",
+  "nuisance_best_prop": {
+    "learning_rate": 0.03,
+    "num_leaves": 31,
+    "min_data_in_leaf": 50,
+    "feature_fraction": 0.9,
+    "bagging_fraction": 0.9,
+    "bagging_freq": 1,
+    "lambda_l2": 5,
+    "lambda_l1": 1,
+    "min_gain_to_split": 0,
+    "n_estimators": 5000
+  },
+  "nuisance_best_outcome": {
+    "learning_rate": 0.05,
+    "num_leaves": 31,
+    "min_data_in_leaf": 150,
+    "feature_fraction": 0.9,
+    "bagging_fraction": 0.9,
+    "bagging_freq": 1,
+    "lambda_l2": 0,
+    "lambda_l1": 1,
+    "min_gain_to_split": 0,
+    "n_estimators": 5000
+  },
+  "tau_best_params": {
+    "learning_rate": 0.05,
+    "num_leaves": 63,
+    "min_data_in_leaf": 200,
+    "feature_fraction": 0.9,
+    "bagging_fraction": 0.9,
+    "bagging_freq": 1,
+    "lambda_l2": 20,
+    "lambda_l1": 0,
+    "min_gain_to_split": 0.5,
+    "n_estimators": 8000
+  },
+  "selected_models": {
+    "propensity": "lgbm",
+    "outcome": "lgbm",
+    "tau": "lgbm"
+  },
+  "blp_metrics": {
+    "blp_alpha": -0.00012274491339349448,
+    "blp_beta": 0.9319590497698531,
+    "blp_r2": 0.0018756251951334013,
+    "blp_alpha_se": 0.0008043760174837472,
+    "blp_beta_se": 0.10234411515694634,
+    "blp_alpha_ci_lo": -0.0016992929376893997,
+    "blp_alpha_ci_hi": 0.0014538031109024108,
+    "blp_beta_ci_lo": 0.7313682700326184,
+    "blp_beta_ci_hi": 1.1325498295070877,
+    "blp_cov_type": "cluster",
+    "blp_n": 133085.0,
+    "blp_n_cluster": 8665.0
+  },
+  "blp_metrics_path": "results/nested_wf_lgbm/train2000_2009_test2010_2012/blp_metrics_oos_train.json"
+}

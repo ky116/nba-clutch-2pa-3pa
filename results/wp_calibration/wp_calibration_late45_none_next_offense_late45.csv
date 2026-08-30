@@ -1,0 +1,2 @@
+with_wp,target,orientation,exclude_terminal_next,min_time,max_time,score_abs,start_season,end_season,n,mean_pred,empirical_win_rate,bias,brier,log_loss,ece,mce,calibration_intercept,calibration_slope
+data/wp/shot_decision_states_2000_2024_rs_with_wp_late45_none.csv.gz,next,offense,True,,45.0,7.0,,,48875,0.37557856972190856,0.33049616368286444,0.04508240603904412,0.11322156389178553,0.3664223838228123,0.05605071166693929,0.17973063334030315,-0.4103942717409888,0.957233855033544

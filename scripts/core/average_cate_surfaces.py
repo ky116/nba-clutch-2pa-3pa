@@ -26,6 +26,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--score-lo", type=float, default=-10.0, help="Fixed lower x-axis bound for score_diff plots.")
     p.add_argument("--score-hi", type=float, default=10.0, help="Fixed upper x-axis bound for score_diff plots.")
     p.add_argument("--score-tick-step", type=float, default=2.0, help="Tick spacing for score_diff plots.")
+    p.add_argument("--plot", action="store_true", help="Also save intermediate tau mean/std diagnostic PNGs.")
     return p.parse_args()
 
 
@@ -151,74 +152,75 @@ def main() -> None:
     merged.sort_values(key_cols).to_csv(out_csv, index=False)
     merged.sort_values(key_cols).to_parquet(out_parquet, index=False)
 
-    out_png_tau = outdir / f"{args.prefix}cate_surface_equal_weight_tau_mean.png"
-    out_png_tau_portrait = outdir / f"{args.prefix}cate_surface_equal_weight_tau_mean_portrait.png"
-    out_png_std = outdir / f"{args.prefix}cate_surface_equal_weight_tau_std_across_models.png"
-    out_png_std_portrait = outdir / f"{args.prefix}cate_surface_equal_weight_tau_std_across_models_portrait.png"
-    plot_heatmap(
-        merged,
-        value_col="tau_mean_ensemble",
-        out_path=out_png_tau,
-        title=None,
-        time_col=args.time_col,
-        score_col=args.score_col,
-        cmap_name="viridis",
-        symmetric=False,
-        min_cell_count=args.min_cell_count,
-        score_lo=args.score_lo,
-        score_hi=args.score_hi,
-        score_tick_step=args.score_tick_step,
-        score_label=args.score_label,
-        colorbar_label="Recalibrated CATE",
-    )
-    plot_heatmap(
-        merged,
-        value_col="tau_mean_ensemble",
-        out_path=out_png_tau_portrait,
-        title=None,
-        time_col=args.time_col,
-        score_col=args.score_col,
-        cmap_name="viridis",
-        symmetric=False,
-        min_cell_count=args.min_cell_count,
-        figsize=(6, 10),
-        score_lo=args.score_lo,
-        score_hi=args.score_hi,
-        score_tick_step=args.score_tick_step,
-        score_label=args.score_label,
-        colorbar_label="Recalibrated CATE",
-    )
-    plot_heatmap(
-        merged,
-        value_col="tau_std_across_models",
-        out_path=out_png_std,
-        title=f"Tau Std Across Models ({len(tau_cols)} models)",
-        time_col=args.time_col,
-        score_col=args.score_col,
-        cmap_name="magma",
-        symmetric=False,
-        min_cell_count=args.min_cell_count,
-        score_lo=args.score_lo,
-        score_hi=args.score_hi,
-        score_tick_step=args.score_tick_step,
-        score_label=args.score_label,
-    )
-    plot_heatmap(
-        merged,
-        value_col="tau_std_across_models",
-        out_path=out_png_std_portrait,
-        title=f"Tau Std Across Models ({len(tau_cols)} models)",
-        time_col=args.time_col,
-        score_col=args.score_col,
-        cmap_name="magma",
-        symmetric=False,
-        min_cell_count=args.min_cell_count,
-        figsize=(6, 10),
-        score_lo=args.score_lo,
-        score_hi=args.score_hi,
-        score_tick_step=args.score_tick_step,
-        score_label=args.score_label,
-    )
+    if args.plot:
+        out_png_tau = outdir / f"{args.prefix}cate_surface_equal_weight_tau_mean.png"
+        out_png_tau_portrait = outdir / f"{args.prefix}cate_surface_equal_weight_tau_mean_portrait.png"
+        out_png_std = outdir / f"{args.prefix}cate_surface_equal_weight_tau_std_across_models.png"
+        out_png_std_portrait = outdir / f"{args.prefix}cate_surface_equal_weight_tau_std_across_models_portrait.png"
+        plot_heatmap(
+            merged,
+            value_col="tau_mean_ensemble",
+            out_path=out_png_tau,
+            title=None,
+            time_col=args.time_col,
+            score_col=args.score_col,
+            cmap_name="viridis",
+            symmetric=False,
+            min_cell_count=args.min_cell_count,
+            score_lo=args.score_lo,
+            score_hi=args.score_hi,
+            score_tick_step=args.score_tick_step,
+            score_label=args.score_label,
+            colorbar_label="Recalibrated CATE",
+        )
+        plot_heatmap(
+            merged,
+            value_col="tau_mean_ensemble",
+            out_path=out_png_tau_portrait,
+            title=None,
+            time_col=args.time_col,
+            score_col=args.score_col,
+            cmap_name="viridis",
+            symmetric=False,
+            min_cell_count=args.min_cell_count,
+            figsize=(6, 10),
+            score_lo=args.score_lo,
+            score_hi=args.score_hi,
+            score_tick_step=args.score_tick_step,
+            score_label=args.score_label,
+            colorbar_label="Recalibrated CATE",
+        )
+        plot_heatmap(
+            merged,
+            value_col="tau_std_across_models",
+            out_path=out_png_std,
+            title=f"Tau Std Across Models ({len(tau_cols)} models)",
+            time_col=args.time_col,
+            score_col=args.score_col,
+            cmap_name="magma",
+            symmetric=False,
+            min_cell_count=args.min_cell_count,
+            score_lo=args.score_lo,
+            score_hi=args.score_hi,
+            score_tick_step=args.score_tick_step,
+            score_label=args.score_label,
+        )
+        plot_heatmap(
+            merged,
+            value_col="tau_std_across_models",
+            out_path=out_png_std_portrait,
+            title=f"Tau Std Across Models ({len(tau_cols)} models)",
+            time_col=args.time_col,
+            score_col=args.score_col,
+            cmap_name="magma",
+            symmetric=False,
+            min_cell_count=args.min_cell_count,
+            figsize=(6, 10),
+            score_lo=args.score_lo,
+            score_hi=args.score_hi,
+            score_tick_step=args.score_tick_step,
+            score_label=args.score_label,
+        )
 
     summary = {
         "n_models": len(tau_cols),
@@ -233,10 +235,11 @@ def main() -> None:
 
     print(f"[saved] {out_csv}")
     print(f"[saved] {out_parquet}")
-    print(f"[saved] {out_png_tau}")
-    print(f"[saved] {out_png_tau_portrait}")
-    print(f"[saved] {out_png_std}")
-    print(f"[saved] {out_png_std_portrait}")
+    if args.plot:
+        print(f"[saved] {out_png_tau}")
+        print(f"[saved] {out_png_tau_portrait}")
+        print(f"[saved] {out_png_std}")
+        print(f"[saved] {out_png_std_portrait}")
     print(f"[saved] {summary_path}")
 
 

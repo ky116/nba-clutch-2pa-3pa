@@ -1,0 +1,2 @@
+n_models,n_cells,mean_agreement_ratio,median_agreement_ratio,unanimous_ratio,pos_neg_conflict_ratio,majority_positive_ratio,majority_negative_ratio,majority_neutral_ratio,eps
+3,525,0.9047619047619048,1.0,0.7142857142857143,0.2857142857142857,0.659047619047619,0.34095238095238095,0.0,0.0

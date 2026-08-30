@@ -9,9 +9,9 @@ import numpy as np
 import pandas as pd
 
 
-DEFAULT_OUTDIR = Path("results/figure_source_data_revise1")
-X_LABEL = "score_diff_offense"
-Y_LABEL = "time_left_game"
+DEFAULT_OUTDIR = Path("results/figure_source_data")
+X_LABEL = "Score differential (offense perspective)"
+Y_LABEL = "Time remaining (seconds)"
 COLORBAR_LABEL = "Recalibrated CATE"
 
 
@@ -79,12 +79,12 @@ def main() -> None:
     outdir = args.outdir
     figure_specs = [
         (
-            outdir / "figure1_full_data_t15_300_cate_surface_source_data.csv",
-            outdir / "figure1_full_data_t15_300_cate_surface.png",
+            outdir / "figure2_full_data_t30_300_cate_surface_source_data.csv",
+            outdir / "figure2_full_data_t30_300_cate_surface.png",
         ),
         (
-            outdir / "figures1_cate_surface_0_15s_masked_n50_source_data.csv",
-            outdir / "figures1_cate_surface_0_15s_masked_n50.png",
+            outdir / "figures1_cate_surface_0_30s_masked_n50_source_data.csv",
+            outdir / "figures1_cate_surface_0_30s_masked_n50.png",
         ),
     ]
     for source_path, out_path in figure_specs:

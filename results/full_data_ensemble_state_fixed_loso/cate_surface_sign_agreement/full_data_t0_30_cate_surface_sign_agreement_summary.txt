@@ -1,0 +1,16 @@
+CATE Surface Sign Agreement Summary
+n_models: 3
+n_cells: 651
+mean_agreement_ratio: 0.822837
+median_agreement_ratio: 0.666667
+unanimous_ratio: 0.468510
+pos_neg_conflict_ratio: 0.531490
+majority_positive_ratio: 0.483871
+majority_negative_ratio: 0.516129
+majority_neutral_ratio: 0.000000
+eps: 0
+
+labels:
+- catboost: results/full_data_catboost_state_fixed_loso/full_data_t0_30_tau_surface_three-point_vs_two-point.parquet
+- xgb: results/full_data_xgb_state_fixed_loso/full_data_t0_30_tau_surface_three-point_vs_two-point.parquet
+- lgbm: results/full_data_lgbm_state_fixed_loso/full_data_t0_30_tau_surface_three-point_vs_two-point.parquet

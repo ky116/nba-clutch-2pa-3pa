@@ -39,6 +39,7 @@ OUT_DIR = BASE_DIR / "analysis"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 TEAM_STATS_DEFAULT = OUT_DIR / "team_shot_stats_2000_2024.parquet"
 TEAM_FOULS_DEFAULT = OUT_DIR / "cumulative_team_fouls_2000_2024_rs.parquet"
+PROCESSED_DIR = BASE_DIR / "processed"
 
 
 def find_nbastats_file(season: int, seasontype: str) -> Path | None:
@@ -62,17 +63,33 @@ def normalize_game_id_series(s: pd.Series) -> pd.Series:
     )
 
 
-def load_elo_diff_map(elo_path: Path, elo_col: str = "elo_diff_pregame") -> pd.DataFrame:
+def _resolve_elo_col(columns: pd.Index, elo_col: str, elo_k: int) -> str | None:
+    candidates = [
+        elo_col,
+        f"{elo_col}_k{elo_k}",
+        "elo_diff_pregame",
+        f"elo_diff_pregame_k{elo_k}",
+    ]
+    for cand in candidates:
+        if cand in columns:
+            return cand
+    return None
+
+
+def load_elo_diff_map(elo_path: Path, elo_col: str = "elo_diff_pregame", elo_k: int = 20) -> pd.DataFrame:
     if not elo_path.exists():
         print(f"[WARN] Elo source not found: {elo_path}")
         return pd.DataFrame(columns=["GAME_ID", "elo_diff"])
 
     try:
-        elo = pd.read_csv(
-            elo_path,
-            compression="gzip" if str(elo_path).endswith(".gz") else None,
-            low_memory=False,
-        )
+        if elo_path.suffix == ".parquet":
+            elo = pd.read_parquet(elo_path)
+        else:
+            elo = pd.read_csv(
+                elo_path,
+                compression="gzip" if str(elo_path).endswith(".gz") else None,
+                low_memory=False,
+            )
     except Exception as e:
         print(f"[WARN] Failed to read Elo source {elo_path}: {e}")
         return pd.DataFrame(columns=["GAME_ID", "elo_diff"])
@@ -82,17 +99,46 @@ def load_elo_diff_map(elo_path: Path, elo_col: str = "elo_diff_pregame") -> pd.D
         if cand in elo.columns:
             game_id_col = cand
             break
-    if game_id_col is None or elo_col not in elo.columns:
-        print(f"[WARN] Elo source missing required columns: one of [game_id, GAME_ID], {elo_col}")
+    resolved_elo_col = _resolve_elo_col(elo.columns, elo_col, elo_k)
+    if game_id_col is None or resolved_elo_col is None:
+        print(
+            f"[WARN] Elo source missing required columns: one of [game_id, GAME_ID], "
+            f"one of [{elo_col}, {elo_col}_k{elo_k}, elo_diff_pregame, elo_diff_pregame_k{elo_k}]"
+        )
         return pd.DataFrame(columns=["GAME_ID", "elo_diff"])
 
-    elo = elo[[game_id_col, elo_col]].copy()
-    elo = elo.rename(columns={game_id_col: "GAME_ID", elo_col: "elo_diff"})
+    elo = elo[[game_id_col, resolved_elo_col]].copy()
+    elo = elo.rename(columns={game_id_col: "GAME_ID", resolved_elo_col: "elo_diff"})
     elo["GAME_ID"] = normalize_game_id_series(elo["GAME_ID"])
     elo["elo_diff"] = pd.to_numeric(elo["elo_diff"], errors="coerce")
     elo = elo.dropna(subset=["GAME_ID", "elo_diff"])
     elo = elo.drop_duplicates(subset=["GAME_ID"], keep="first")
     return elo[["GAME_ID", "elo_diff"]]
+
+
+def load_elo_diff_map_from_processed_games(
+    seasons: list[int],
+    seasontype: str,
+    elo_col: str = "elo_diff_pregame",
+    elo_k: int = 20,
+    processed_dir: Path = PROCESSED_DIR,
+) -> pd.DataFrame:
+    parts: list[pd.DataFrame] = []
+    for season in sorted(seasons):
+        path = processed_dir / f"games_{season}_{seasontype}.parquet"
+        if not path.exists():
+            print(f"[WARN] Processed games Elo source not found for season={season}: {path}")
+            continue
+        sub = load_elo_diff_map(path, elo_col=elo_col, elo_k=elo_k)
+        if not sub.empty:
+            parts.append(sub)
+
+    if not parts:
+        return pd.DataFrame(columns=["GAME_ID", "elo_diff"])
+
+    out = pd.concat(parts, ignore_index=True)
+    out = out.drop_duplicates(subset=["GAME_ID"], keep="first")
+    return out[["GAME_ID", "elo_diff"]]
 
 
 def season_to_era(season: int) -> str:
@@ -755,7 +801,7 @@ def main():
         type=str,
         default="",
         help="Optional Elo source CSV(.gz) with game_id and elo_diff_pregame. "
-             "Default: auto infer wp_states_*_elo_k{elo-k}_h0.csv.gz",
+             "Default: read data/processed/games_*_{seasontype}.parquet.",
     )
     parser.add_argument(
         "--elo-k",
@@ -771,6 +817,15 @@ def main():
     )
     parser.add_argument("--output-dir", type=str, default="data/analysis",
                         help="Output directory for parquet files")
+    parser.add_argument(
+        "--dml-output",
+        type=str,
+        default="",
+        help=(
+            "Optional output path for the all-shot DML CSV. "
+            "Default: data/wp/shot_decision_panel_{start}_{end}_{seasontype}_dml.csv.gz"
+        ),
+    )
     parser.add_argument(
         "--total-timeouts-per-team",
         type=int,
@@ -822,9 +877,16 @@ def main():
 
     if args.elo_ref_path:
         elo_path = Path(args.elo_ref_path)
+        elo_map = load_elo_diff_map(elo_path, elo_col=args.elo_col, elo_k=args.elo_k)
+        elo_source_label = str(elo_path)
     else:
-        elo_path = WP_DIR / f"wp_states_2000_2024_{args.seasontype}_elo_k{args.elo_k}_h0.csv.gz"
-    elo_map = load_elo_diff_map(elo_path, elo_col=args.elo_col)
+        elo_map = load_elo_diff_map_from_processed_games(
+            seasons=seasons,
+            seasontype=args.seasontype,
+            elo_col=args.elo_col,
+            elo_k=args.elo_k,
+        )
+        elo_source_label = f"{PROCESSED_DIR}/games_*_{args.seasontype}.parquet"
     if not elo_map.empty:
         df["GAME_ID"] = normalize_game_id_series(df["GAME_ID"])
         before_len = len(df)
@@ -833,7 +895,7 @@ def main():
         if before_len != after_len:
             print(f"[WARN] Row count changed after Elo merge: {before_len} -> {after_len}")
         matched = int(df["elo_diff"].notna().sum())
-        print(f"  -> Elo matched: {matched:,} / {len(df):,} ({matched / max(len(df), 1) * 100:.2f}%) from {elo_path}")
+        print(f"  -> Elo matched: {matched:,} / {len(df):,} ({matched / max(len(df), 1) * 100:.2f}%) from {elo_source_label}")
     else:
         df["elo_diff"] = np.nan
         print("  -> Elo merge skipped (no valid elo source); elo_diff filled with NaN.")
@@ -1130,8 +1192,12 @@ def main():
     else:
         start_season = None
         end_season = None
-    dml_name = f"shot_decision_panel_{start_season}_{end_season}_{args.seasontype}_dml.csv.gz"
-    dml_path = WP_DIR / dml_name
+    if args.dml_output:
+        dml_path = Path(args.dml_output)
+        dml_path.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        dml_name = f"shot_decision_panel_{start_season}_{end_season}_{args.seasontype}_dml.csv.gz"
+        dml_path = WP_DIR / dml_name
     df_all.to_csv(dml_path, index=False, compression="gzip")
     print(f"✓ Saved DML all: {dml_path} ({len(df_all):,} rows)")
 

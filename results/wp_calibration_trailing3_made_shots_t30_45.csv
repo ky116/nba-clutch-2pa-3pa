@@ -1,0 +1,3 @@
+condition,shot_type,n,n_games,fitted_next_state_wp,empirical_win_rate,wp_minus_empirical
+"Trailing by 3, 30-45 s, after made shot, nonterminal next state",2PA,321,321,0.337703574394919,0.2211838006230529,0.116519773771866
+"Trailing by 3, 30-45 s, after made shot, nonterminal next state",3PA,142,140,0.4707911826306916,0.4154929577464789,0.0552982248842127

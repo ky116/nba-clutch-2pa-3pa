@@ -1,0 +1,2 @@
+mode,model,params,note
+fixed,catboost,"{""depth"": 8, ""learning_rate"": 0.05, ""l2_leaf_reg"": 30, ""min_data_in_leaf"": 200, ""iterations"": 8000, ""od_wait"": 300}",retuning_skipped

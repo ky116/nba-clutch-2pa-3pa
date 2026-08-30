@@ -23,8 +23,7 @@ The main regular-season reproduction path is:
 
 1. Prepare regular-season raw inputs from `nba_data` under `data/nba_raw/`.
 2. Build per-season processed tables and WP / shot-decision states.
-3. Fit or load the adopted regular-season WP model and score shot states to
-   construct `delta_wp`.
+3. Score shot states with season-held-out WP refits to construct `delta_wp`.
 4. Build the clutch shot-choice panel used by the doubly robust learners.
 5. Fit nested walk-forward CATE learners and export fixed hyperparameters.
 6. Fit full-data learner-specific CATE models, assemble the ensemble, and
@@ -33,21 +32,33 @@ The main regular-season reproduction path is:
 
 The commands below follow this order. Full reproduction is computationally
 large; the repository is intended to make the analysis repeatable, not to make
-the full manuscript pipeline run in a few minutes after clone.
+the full manuscript pipeline run in a few minutes after clone. The top-level
+orchestration entry point is:
+
+```sh
+bash scripts/pipelines/run_reproduction_release.sh --check-inputs
+bash scripts/pipelines/run_reproduction_release.sh --through panel
+```
+
+For Slurm-based reruns from the shot-panel stage onward:
+
+```sh
+bash scripts/pipelines/run_reproduction_release.sh --submit-slurm --from panel --through figures
+```
 
 ## Figure mapping
 
 The final figure files retained under `figures/` are:
 
-- `figures/figure1_full_data_t15_300_cate_surface.png`
-- `figures/figure2_outer_fold_t15_300_cate_surface.png`
-- `figures/figures1_cate_surface_0_15s_masked_n50.png`
+- `figures/figure2_full_data_t30_300_cate_surface.png`
+- `figures/figure3_outer_fold_t30_300_cate_surface.png`
+- `figures/figures1_cate_surface_0_30s_masked_n50.png`
 
 | Manuscript output | Repository artifact | Main generating command |
 | --- | --- | --- |
-| Fig. 1 full-data CATE surface | `figures/figure1_full_data_t15_300_cate_surface.png` | `python scripts/helpers/assemble_manuscript_cate_figures.py ...` |
-| Fig. 2 held-out walk-forward CATE surface | `figures/figure2_outer_fold_t15_300_cate_surface.png` | `python scripts/helpers/rebuild_wf_cate_surfaces_recalibrated.py ...`, then `python scripts/helpers/assemble_manuscript_cate_figures.py ...` |
-| Supplementary late-clock CATE surface | `figures/figures1_cate_surface_0_15s_masked_n50.png` | `python scripts/helpers/assemble_manuscript_cate_figures.py ...` |
+| Fig. 2 full-data CATE surface | `figures/figure2_full_data_t30_300_cate_surface.png` | `python scripts/helpers/assemble_manuscript_cate_figures.py ...` |
+| Fig. 3 held-out walk-forward CATE surface | `figures/figure3_outer_fold_t30_300_cate_surface.png` | `python scripts/helpers/rebuild_wf_cate_surfaces_recalibrated.py ...`, then `python scripts/helpers/assemble_manuscript_cate_figures.py ...` |
+| Supplementary late-clock CATE surface | `figures/figures1_cate_surface_0_30s_masked_n50.png` | `python scripts/helpers/assemble_manuscript_cate_figures.py ...` |
 
 ## Environment
 
@@ -165,6 +176,8 @@ Default downstream paths used by the scripts include:
 
 - `data/wp/wp_states_2000_2024_rs.csv.gz`
 - `data/wp/shot_decision_states_2000_2024_rs.csv.gz`
+- `data/processed/games_YYYY_rs.parquet`, which includes leak-free pregame
+  Elo columns such as `elo_diff_pregame_k20` used by the shot-choice panel
 - `data/analysis/shotchoice_panel_clutch_rs.parquet`
 
 If these downstream files are already present, the raw `nba_data` checkout does
@@ -186,15 +199,35 @@ whether intermediate files already exist.
 
 ## Main workflow
 
-The high-level regular-season workflow is:
+The high-level regular-season workflow can be run through the orchestration
+wrapper:
 
 ```sh
-# Score shot states with the adopted WP model and build the clutch panel.
-bash scripts/pipelines/run_rs_m0_k0_shot_panel.sh
+# Check raw data placement.
+bash scripts/pipelines/run_reproduction_release.sh --check-inputs
+
+# Build intermediates through the clutch shot-choice panel and validation.
+bash scripts/pipelines/run_reproduction_release.sh --through validate
+
+# Check downstream contracts explicitly, for example after a Slurm job finishes.
+python scripts/helpers/check_reproduction_contracts.py --stage panel
+
+# Submit panel, walk-forward, full-data, ensemble, and figure stages to Slurm.
+bash scripts/pipelines/run_reproduction_release.sh --submit-slurm --from panel --through figures
+```
+
+The equivalent manual regular-season commands are:
+
+```sh
+# Score shot states with strict season-OOF WP refits and build the clutch panel.
+# This uses the protocol M0 WP formula as a template and does not fit or load
+# a full-data WP model for OOF scoring.
+OOF_TEMPLATE_PROTOCOL_M0=1 bash scripts/pipelines/run_rs_m0_k0_shot_panel.sh
 
 # Estimate held-out CATEs by nested walk-forward.
 bash scripts/pipelines/run_nested_walk_forward_catboost.sh
-bash scripts/pipelines/run_nested_walk_forward_xgb_lgbm.sh
+bash scripts/slurm/run_nested_walk_forward_xgb_slurm.sh
+bash scripts/slurm/run_nested_walk_forward_lgbm_slurm.sh
 
 # Fit full-data learner-specific CATE models and produce ensemble surfaces.
 # This wrapper submits Slurm jobs with sbatch.
@@ -204,6 +237,18 @@ bash scripts/pipelines/run_full_data_pipeline.sh
 The full-data pipeline uses fixed hyperparameters exported from the
 walk-forward outputs, fits final learner-specific CATE models, builds the
 equal-weight ensemble, and writes CATE surface artifacts.
+
+On a Slurm cluster, submit the Slurm wrappers with `sbatch` instead of running
+them through `bash`:
+
+```sh
+bash scripts/pipelines/run_reproduction_release.sh --submit-slurm --from panel --through figures
+```
+
+`run_full_data_pipeline.sh` is itself a submission wrapper: it calls `sbatch`
+for the learner-specific full-data jobs and the ensemble job. When invoked by
+the top-level wrapper with `--through figures`, it also submits figure assembly
+after the ensemble job completes.
 
 For Slurm users, scheduler-specific email notifications, node exclusions, and
 account/partition choices should be supplied locally with `sbatch` options or
@@ -220,6 +265,10 @@ available locally, this section can be used to rebuild the manuscript figures
 without rerunning the full WP and DR/CATE estimation pipeline. Otherwise, run
 the full workflow above first.
 
+The lightweight numerical outputs retained for direct inspection are indexed in
+[`results/README.md`](results/README.md). The commands below reproduce the
+published PNGs from the retained CATE outputs and panel:
+
 ```sh
 # Rebuild the held-out walk-forward ensemble surface.
 python scripts/helpers/rebuild_wf_cate_surfaces_recalibrated.py \
@@ -232,7 +281,7 @@ python scripts/helpers/rebuild_wf_cate_surfaces_recalibrated.py \
 python scripts/helpers/assemble_manuscript_cate_figures.py \
   --ensemble-dir results/full_data_ensemble_state_fixed_loso \
   --wf-dir results/wf_cate_surfaces \
-  --figure-source-dir results/figure_source_data_revise1 \
+  --figure-source-dir results/figure_source_data \
   --panel data/analysis/shotchoice_panel_clutch_rs.parquet \
   --outdir figures
 ```
@@ -241,9 +290,23 @@ python scripts/helpers/assemble_manuscript_cate_figures.py \
 full-data ensemble CATE surfaces and model sign-agreement PNG. The assembly
 helper then writes:
 
-- `figures/figure1_full_data_t15_300_cate_surface.png`
-- `figures/figure2_outer_fold_t15_300_cate_surface.png`
-- `figures/figures1_cate_surface_0_15s_masked_n50.png`
+- `figures/figure2_full_data_t30_300_cate_surface.png`
+- `figures/figure3_outer_fold_t30_300_cate_surface.png`
+- `figures/figures1_cate_surface_0_30s_masked_n50.png`
+
+To regenerate the retained source-data tables and figures from scratch, run the
+release driver through the figures stage:
+
+```sh
+bash scripts/pipelines/run_reproduction_release.sh \
+  --from panel --through figures --submit-slurm --no-skip-existing \
+  --python-bin .venv/bin/python3
+```
+
+This command rebuilds the panel, walk-forward and full-data CATE outputs, the
+figure source tables under `results/figure_source_data/`, and the manuscript
+figures under `figures/`. The full run requires the external NBA source data and
+a Slurm environment; see `ENVIRONMENT.md` and the data setup section above.
 
 ## Release versioning
 

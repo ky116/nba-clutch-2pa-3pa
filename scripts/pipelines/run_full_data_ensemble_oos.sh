@@ -29,6 +29,7 @@ TREAT_B="${TREAT_B:-two-point}"
 THREADS="${THREADS:-8}"
 RUN_CATE_ENSEMBLE="${RUN_CATE_ENSEMBLE:-1}"
 CATE_SURFACE_GLOB="${CATE_SURFACE_GLOB:-*tau_surface_${TREAT_A}_vs_${TREAT_B}.parquet}"
+CATE_SURFACE_PREFIXES="${CATE_SURFACE_PREFIXES:-full_data_t30_300_ full_data_t0_30_}"
 CATE_ENSEMBLE_PREFIX="${CATE_ENSEMBLE_PREFIX:-ensemble_oos_}"
 RUN_CATE_CELL_SUPPORT="${RUN_CATE_CELL_SUPPORT:-1}"
 CATE_CELL_SUPPORT_DATA="${CATE_CELL_SUPPORT_DATA:-$OUTDIR/nuisance_oos_train.parquet}"
@@ -83,6 +84,7 @@ echo "run_cate_cell_support: $RUN_CATE_CELL_SUPPORT"
 echo "cate_cell_support_outdir: $CATE_CELL_SUPPORT_OUTDIR"
 echo "run_cate_sign_agreement: $RUN_CATE_SIGN_AGREEMENT"
 echo "ensemble_use_calibrated_tau: $ENSEMBLE_USE_CALIBRATED_TAU"
+echo "cate_surface_prefixes: $CATE_SURFACE_PREFIXES"
 
 for required in \
   "$CAT_DIR/nuisance_oos_train.parquet" "$CAT_DIR/tau_oos_train.parquet" \
@@ -249,6 +251,24 @@ if [[ "$RUN_CATE_ENSEMBLE" == "1" ]]; then
   if [[ "${#COMMON_CATE_PREFIXES[@]}" -eq 0 ]]; then
     echo "[error] no common CATE surface prefixes found across catboost/xgb/lgbm" >&2
     exit 1
+  fi
+
+  if [[ -n "$CATE_SURFACE_PREFIXES" ]]; then
+    declare -A CATE_PREFIX_ALLOW=()
+    for prefix in $CATE_SURFACE_PREFIXES; do
+      CATE_PREFIX_ALLOW["$prefix"]=1
+    done
+    FILTERED_CATE_PREFIXES=()
+    for prefix in "${COMMON_CATE_PREFIXES[@]}"; do
+      if [[ -n "${CATE_PREFIX_ALLOW[$prefix]:-}" ]]; then
+        FILTERED_CATE_PREFIXES+=("$prefix")
+      fi
+    done
+    COMMON_CATE_PREFIXES=("${FILTERED_CATE_PREFIXES[@]}")
+    if [[ "${#COMMON_CATE_PREFIXES[@]}" -eq 0 ]]; then
+      echo "[error] no common CATE surface prefixes remain after CATE_SURFACE_PREFIXES filter: $CATE_SURFACE_PREFIXES" >&2
+      exit 1
+    fi
   fi
 
   for prefix in "${COMMON_CATE_PREFIXES[@]}"; do

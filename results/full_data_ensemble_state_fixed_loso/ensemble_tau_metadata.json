@@ -1,0 +1,12 @@
+{
+  "tau_calibration_applied": true,
+  "ensemble_tau_column": "tau_hat",
+  "model_tau_source_column": "tau_hat_cal",
+  "model_tau_source_paths": [
+    "results/full_data_catboost_state_fixed_loso/full_data_tau_oos_train_calibrated.parquet",
+    "results/full_data_xgb_state_fixed_loso/full_data_tau_oos_train_calibrated.parquet",
+    "results/full_data_lgbm_state_fixed_loso/full_data_tau_oos_train_calibrated.parquet"
+  ],
+  "raw_tau_column": "tau_hat_raw",
+  "calibrated_tau_column": "tau_hat_cal"
+}

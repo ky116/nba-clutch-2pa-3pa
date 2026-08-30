@@ -16,22 +16,22 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument(
         "--input",
-        default="results/late_clock_diagnostics/shot_level_delta_wp_distribution/observed_delta_wp_surface_t0_15_binned_3sec_1point.csv",
+        default="results/late_clock_diagnostics/shot_level_delta_wp_distribution/observed_delta_wp_surface_t0_30_binned_3sec_1point.csv",
     )
     p.add_argument(
         "--out",
-        default="results/late_clock_diagnostics/shot_level_delta_wp_distribution/observed_delta_wp_difference_3p_minus_2p_t0_15.png",
+        default="results/late_clock_diagnostics/shot_level_delta_wp_distribution/observed_delta_wp_difference_3p_minus_2p_t0_30.png",
     )
     p.add_argument(
         "--out-highlighted",
-        default="results/late_clock_diagnostics/shot_level_delta_wp_distribution/observed_delta_wp_difference_3p_minus_2p_t0_15_forced_rule_highlight.png",
+        default="results/late_clock_diagnostics/shot_level_delta_wp_distribution/observed_delta_wp_difference_3p_minus_2p_t0_30_forced_rule_highlight.png",
     )
     p.add_argument("--dpi", type=int, default=300)
     return p.parse_args()
 
 
 def draw(data: pd.DataFrame, out: Path, highlighted: bool, dpi: int) -> None:
-    time_order = ["0–2", "3–5", "6–8", "9–11", "12–15"]
+    time_order = ["0-2", "3-5", "6-8", "9-11", "12-14", "15-17", "18-20", "21-23", "24-26", "27-30"]
     score_order = list(range(-10, 11))
     shown = data.copy()
     shown.loc[~shown["supported_diff_n30"].astype(bool), "mean_delta_wp_diff_3p_minus_2p"] = np.nan

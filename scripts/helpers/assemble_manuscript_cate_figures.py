@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import shutil
 from pathlib import Path
 
 _mplconfig = Path(f"/tmp/matplotlib-{os.getuid()}")
@@ -20,18 +19,19 @@ import numpy as np
 import pandas as pd
 
 
-FIGURE2_NAME = "figure1_full_data_t15_300_cate_surface"
-FIGURE3_NAME = "figures1_cate_surface_0_15s_masked_n50"
-WF_NAME = "figure2_outer_fold_t15_300_cate_surface"
-WF_SOURCE_NAME = "outer_fold_ensemble_cate_surface_15_300"
-POSITIVE_SHARE_NAME = "full_data_t15_300_cate_surface_positive_share"
+FIGURE2_NAME = "figure2_full_data_t30_300_cate_surface"
+FIGURE3_NAME = "figures1_cate_surface_0_30s_masked_n50"
+WF_NAME = "figure3_outer_fold_t30_300_cate_surface"
+WF_SOURCE_NAME = "outer_fold_ensemble_cate_surface_30_300"
+X_AXIS_LABEL = "Score differential (offense perspective)"
+Y_AXIS_LABEL = "Time remaining (seconds)"
 
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--ensemble-dir", type=Path, default=Path("results/full_data_ensemble_state_fixed_loso"))
     p.add_argument("--wf-dir", type=Path, default=Path("results/wf_cate_surfaces"))
-    p.add_argument("--figure-source-dir", type=Path, default=Path("results/figure_source_data_revise1"))
+    p.add_argument("--figure-source-dir", type=Path, default=Path("results/figure_source_data"))
     p.add_argument("--panel", type=Path, default=Path("data/analysis/shotchoice_panel_clutch_rs.parquet"))
     p.add_argument("--outdir", type=Path, default=Path("."))
     p.add_argument("--min-figure3-cell-count", type=int, default=50)
@@ -191,8 +191,8 @@ def draw_heatmap(source_path: Path, out_path: Path, min_count: int | None = None
     )
     ax.set_xlim(-10, 10)
     ax.set_xticks(np.arange(-10, 11, 2))
-    ax.set_xlabel("score_diff_offense")
-    ax.set_ylabel("time_left_game")
+    ax.set_xlabel(X_AXIS_LABEL)
+    ax.set_ylabel(Y_AXIS_LABEL)
     fig.colorbar(im, ax=ax, label="Recalibrated CATE")
     fig.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -201,34 +201,66 @@ def draw_heatmap(source_path: Path, out_path: Path, min_count: int | None = None
     print(f"[saved] {out_path}")
 
 
-def copy_png(src: Path, dst: Path) -> None:
-    if not src.exists():
-        raise FileNotFoundError(src)
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(src, dst)
-    print(f"[saved] {dst}")
+def draw_wf_heatmap(source_path: Path, out_path: Path, min_count: int = 20) -> None:
+    surface = pd.read_csv(source_path)
+    folds = list(surface["outer_fold"].drop_duplicates())
+    fig, axes = plt.subplots(1, len(folds), figsize=(4.2 * len(folds), 4.2), sharey=True)
+    if len(folds) == 1:
+        axes = [axes]
+    vals = surface.loc[surface["shown_in_figure"].astype(bool), "cate_value"].to_numpy(dtype=float)
+    vmax = max(float(np.nanmax(np.abs(vals))) if vals.size else 0.01, 0.01)
+    cmap = plt.get_cmap("viridis").copy()
+    cmap.set_bad("white")
+    im = None
+    for ax, fold in zip(axes, folds):
+        cur = surface[surface["outer_fold"] == fold].copy()
+        cur.loc[~cur["shown_in_figure"].astype(bool), "cate_value"] = np.nan
+        pivot = cur.pivot(index="time_bin_mid", columns="score_diff_cell", values="cate_value").sort_index()
+        arr = np.ma.masked_invalid(pivot.to_numpy(dtype=float))
+        im = ax.imshow(
+            arr,
+            origin="lower",
+            aspect="auto",
+            interpolation="nearest",
+            cmap=cmap,
+            vmin=-vmax,
+            vmax=vmax,
+            extent=[
+                float(pivot.columns.min()) - 0.5,
+                float(pivot.columns.max()) + 0.5,
+                float(pivot.index.min()),
+                float(pivot.index.max()),
+            ],
+        )
+        ax.set_title(str(cur["test_years"].iloc[0]))
+        ax.set_xticks(np.arange(int(pivot.columns.min()), int(pivot.columns.max()) + 1, 5))
+    axes[0].set_ylabel(Y_AXIS_LABEL)
+    fig.supxlabel(X_AXIS_LABEL, y=0.02)
+    if im is not None:
+        fig.colorbar(im, ax=axes, label="Recalibrated CATE", shrink=0.82)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=160, bbox_inches="tight")
+    plt.close(fig)
+    print(f"[saved] {out_path}")
 
 
 def main() -> None:
     args = parse_args()
 
     figure2_surface = choose_existing(
-        [args.ensemble_dir / "full_data_t15_300_cate_surface_equal_weight.csv"],
+        [args.ensemble_dir / "full_data_t30_300_cate_surface_equal_weight.csv"],
         "Figure 2 ensemble surface CSV",
     )
     figure3_surface = choose_existing(
         [
-            args.ensemble_dir / "masked_n50" / "full_data_t0_15_cate_surface_equal_weight.csv",
-            args.ensemble_dir / "full_data_t0_15_cate_surface_equal_weight.csv",
+            args.ensemble_dir / "masked_n50" / "full_data_t0_30_cate_surface_equal_weight.csv",
+            args.ensemble_dir / "full_data_t0_30_cate_surface_equal_weight.csv",
         ],
         "Figure 3 ensemble surface CSV",
     )
-    wf_png = choose_existing(
-        [
-            args.wf_dir / f"{WF_NAME}.png",
-            args.wf_dir / f"{WF_SOURCE_NAME}.png",
-        ],
-        "walk-forward CATE surface PNG",
+    wf_surface = choose_existing(
+        [args.wf_dir / f"{WF_SOURCE_NAME}.csv"],
+        "walk-forward CATE surface CSV",
     )
 
     figure2_source = args.figure_source_dir / f"{FIGURE2_NAME}_source_data.csv"
@@ -236,23 +268,13 @@ def main() -> None:
     make_source(figure2_surface, figure2_source, args.panel, min_count=None)
     make_source(figure3_surface, figure3_source, args.panel, min_count=args.min_figure3_cell_count)
 
-    draw_heatmap(figure2_source, args.figure_source_dir / f"{FIGURE2_NAME}.png")
+    draw_heatmap(figure2_source, args.outdir / f"{FIGURE2_NAME}.png")
     draw_heatmap(
         figure3_source,
-        args.figure_source_dir / f"{FIGURE3_NAME}.png",
+        args.outdir / f"{FIGURE3_NAME}.png",
         min_count=args.min_figure3_cell_count,
     )
-
-    copy_png(args.figure_source_dir / f"{FIGURE2_NAME}.png", args.outdir / f"{FIGURE2_NAME}.png")
-    copy_png(args.figure_source_dir / f"{FIGURE3_NAME}.png", args.outdir / f"{FIGURE3_NAME}.png")
-    copy_png(wf_png, args.outdir / f"{WF_NAME}.png")
-    positive_share_candidates = [
-        args.ensemble_dir / "cate_surface_sign_agreement" / f"{POSITIVE_SHARE_NAME}.png",
-        args.ensemble_dir / f"{POSITIVE_SHARE_NAME}.png",
-    ]
-    positive_share = next((p for p in positive_share_candidates if p.exists()), None)
-    if positive_share is not None:
-        copy_png(positive_share, args.outdir / f"{POSITIVE_SHARE_NAME}.png")
+    draw_wf_heatmap(wf_surface, args.outdir / f"{WF_NAME}.png")
 
 
 if __name__ == "__main__":

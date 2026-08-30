@@ -1,0 +1,118 @@
+{
+  "outer_split": {
+    "train_start": 2000,
+    "train_end": 2015,
+    "test_start": 2016,
+    "test_end": 2018
+  },
+  "inner_splits": [
+    {
+      "train_start": 2000,
+      "train_end": 2003,
+      "test_start": 2004,
+      "test_end": 2006
+    },
+    {
+      "train_start": 2000,
+      "train_end": 2006,
+      "test_start": 2007,
+      "test_end": 2009
+    },
+    {
+      "train_start": 2000,
+      "train_end": 2009,
+      "test_start": 2010,
+      "test_end": 2012
+    },
+    {
+      "train_start": 2000,
+      "train_end": 2012,
+      "test_start": 2013,
+      "test_end": 2015
+    }
+  ],
+  "feature_cols": [
+    "time_left_game",
+    "score_diff",
+    "OT_flag",
+    "start_type",
+    "start_type_group",
+    "after_off_reb",
+    "elo_diff",
+    "before_home_possession",
+    "era",
+    "own_fouls_period",
+    "opp_fouls_period",
+    "timeouts_left_us",
+    "timeouts_left_them",
+    "own_allowed_2p_pct_eb",
+    "own_allowed_3p_pct_eb",
+    "own_off_2p_pct_eb",
+    "own_off_3p_pct_eb",
+    "own_off_3pa_share_eb",
+    "own_off_2pa_share_eb",
+    "own_allowed_3pa_share_eb",
+    "opp_allowed_2p_pct_eb",
+    "opp_allowed_3p_pct_eb",
+    "opp_off_2p_pct_eb",
+    "opp_off_3p_pct_eb",
+    "opp_off_3pa_share_eb",
+    "opp_off_2pa_share_eb",
+    "opp_allowed_3pa_share_eb"
+  ],
+  "treatment_scheme": "binary",
+  "cluster_col": "GAME_ID",
+  "nuisance_best_prop": {
+    "max_depth": 2,
+    "learning_rate": 0.03,
+    "min_child_weight": 5,
+    "subsample": 0.9,
+    "colsample_bytree": 0.9,
+    "reg_lambda": 5,
+    "reg_alpha": 0.5,
+    "gamma": 0,
+    "n_estimators": 5000
+  },
+  "nuisance_best_outcome": {
+    "max_depth": 4,
+    "learning_rate": 0.1,
+    "min_child_weight": 20,
+    "subsample": 0.7,
+    "colsample_bytree": 0.9,
+    "reg_lambda": 5,
+    "reg_alpha": 0.0,
+    "gamma": 1,
+    "n_estimators": 5000
+  },
+  "tau_best_params": {
+    "max_depth": 4,
+    "learning_rate": 0.05,
+    "min_child_weight": 20,
+    "subsample": 0.7,
+    "colsample_bytree": 0.9,
+    "reg_lambda": 30,
+    "reg_alpha": 0.0,
+    "gamma": 1,
+    "n_estimators": 8000
+  },
+  "selected_models": {
+    "propensity": "xgb",
+    "outcome": "xgb",
+    "tau": "xgb"
+  },
+  "blp_metrics": {
+    "blp_alpha": -0.0006451265304081731,
+    "blp_beta": 0.7007090325959072,
+    "blp_r2": 0.0006615724416361157,
+    "blp_alpha_se": 0.000731335888621877,
+    "blp_beta_se": 0.0927593723735424,
+    "blp_alpha_ci_lo": -0.0020785185327086486,
+    "blp_alpha_ci_hi": 0.0007882654718923022,
+    "blp_beta_ci_lo": 0.5189040035152245,
+    "blp_beta_ci_hi": 0.88251406167659,
+    "blp_cov_type": "cluster",
+    "blp_n": 212592.0,
+    "blp_n_cluster": 13617.0
+  },
+  "blp_metrics_path": "results/nested_wf_xgb/train2000_2015_test2016_2018/blp_metrics_oos_train.json"
+}

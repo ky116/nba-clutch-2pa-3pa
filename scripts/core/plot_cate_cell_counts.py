@@ -20,6 +20,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--time-col", default="time_left_game")
     p.add_argument("--score-col", default="score_diff")
     p.add_argument("--title", default=None)
+    p.add_argument("--plot", action="store_true", help="Also save cell-count diagnostic PNGs.")
     return p.parse_args()
 
 
@@ -149,20 +150,22 @@ def main() -> None:
     )
     summary.to_csv(summary_path, index=False)
 
-    title = args.title or "CATE Surface Cell Counts (log1p)"
-    plot_heatmap(out, "cell_count_log1p", png_path, title, args.time_col, args.score_col)
-    plot_heatmap(
-        out,
-        "cell_density_log1p",
-        density_png_path,
-        title.replace("Counts", "Density") if "Counts" in title else f"{title} Density",
-        args.time_col,
-        args.score_col,
-    )
+    if args.plot:
+        title = args.title or "CATE Surface Cell Counts (log1p)"
+        plot_heatmap(out, "cell_count_log1p", png_path, title, args.time_col, args.score_col)
+        plot_heatmap(
+            out,
+            "cell_density_log1p",
+            density_png_path,
+            title.replace("Counts", "Density") if "Counts" in title else f"{title} Density",
+            args.time_col,
+            args.score_col,
+        )
 
     print(f"[saved] {csv_path}")
-    print(f"[saved] {png_path}")
-    print(f"[saved] {density_png_path}")
+    if args.plot:
+        print(f"[saved] {png_path}")
+        print(f"[saved] {density_png_path}")
     print(f"[saved] {summary_path}")
 
 

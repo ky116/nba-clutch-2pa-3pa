@@ -3,12 +3,12 @@
 
 Example:
   .venv/bin/python summarize_cate_surface_sign_agreement.py \
-    --surface results/full_data_catboost_state_fixed_loso/full_data_t15_300_tau_surface_three-point_vs_two-point.parquet \
-    --surface results/full_data_xgb_state_fixed_loso/full_data_t15_300_tau_surface_three-point_vs_two-point.parquet \
-    --surface results/full_data_lgbm_state_fixed_loso/full_data_t15_300_tau_surface_three-point_vs_two-point.parquet \
+    --surface results/full_data_catboost_state_fixed_loso/full_data_t30_300_tau_surface_three-point_vs_two-point.parquet \
+    --surface results/full_data_xgb_state_fixed_loso/full_data_t30_300_tau_surface_three-point_vs_two-point.parquet \
+    --surface results/full_data_lgbm_state_fixed_loso/full_data_t30_300_tau_surface_three-point_vs_two-point.parquet \
     --label catboost --label xgb --label lgbm \
     --outdir results/cate_surface_agreement \
-    --prefix full_data_t15_300_
+    --prefix full_data_t30_300_
 """
 
 from __future__ import annotations
@@ -34,6 +34,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--score-lo", type=float, default=-10.0, help="Fixed lower x-axis bound for score_diff plots.")
     p.add_argument("--score-hi", type=float, default=10.0, help="Fixed upper x-axis bound for score_diff plots.")
     p.add_argument("--score-tick-step", type=float, default=2.0, help="Tick spacing for score_diff plots.")
+    p.add_argument("--plot", action="store_true", help="Also save sign-agreement diagnostic PNGs.")
     return p.parse_args()
 
 
@@ -196,41 +197,43 @@ def main() -> None:
         for label, path in zip(labels, surfaces):
             f.write(f"- {label}: {path}\n")
 
-    agree_png = outdir / f"{args.prefix}cate_surface_agreement_ratio.png"
-    pos_png = outdir / f"{args.prefix}cate_surface_positive_share.png"
-    _plot_heatmap(
-        merged,
-        value_col="agreement_ratio",
-        title=f"CATE Sign Agreement Ratio ({n_models} models)",
-        out_path=agree_png,
-        time_col=args.time_col,
-        score_col=args.score_col,
-        vmin=1.0 / n_models,
-        vmax=1.0,
-        score_lo=args.score_lo,
-        score_hi=args.score_hi,
-        score_tick_step=args.score_tick_step,
-    )
-    _plot_heatmap(
-        merged,
-        value_col="positive_share",
-        title=f"CATE Positive Share ({n_models} models)",
-        out_path=pos_png,
-        time_col=args.time_col,
-        score_col=args.score_col,
-        vmin=0.0,
-        vmax=1.0,
-        score_lo=args.score_lo,
-        score_hi=args.score_hi,
-        score_tick_step=args.score_tick_step,
-    )
+    if args.plot:
+        agree_png = outdir / f"{args.prefix}cate_surface_agreement_ratio.png"
+        pos_png = outdir / f"{args.prefix}cate_surface_positive_share.png"
+        _plot_heatmap(
+            merged,
+            value_col="agreement_ratio",
+            title=f"CATE Sign Agreement Ratio ({n_models} models)",
+            out_path=agree_png,
+            time_col=args.time_col,
+            score_col=args.score_col,
+            vmin=1.0 / n_models,
+            vmax=1.0,
+            score_lo=args.score_lo,
+            score_hi=args.score_hi,
+            score_tick_step=args.score_tick_step,
+        )
+        _plot_heatmap(
+            merged,
+            value_col="positive_share",
+            title=f"CATE Positive Share ({n_models} models)",
+            out_path=pos_png,
+            time_col=args.time_col,
+            score_col=args.score_col,
+            vmin=0.0,
+            vmax=1.0,
+            score_lo=args.score_lo,
+            score_hi=args.score_hi,
+            score_tick_step=args.score_tick_step,
+        )
 
     print(f"[saved] {grid_out}")
     print(f"[saved] {grid_parquet_out}")
     print(f"[saved] {summary_csv}")
     print(f"[saved] {summary_txt}")
-    print(f"[saved] {agree_png}")
-    print(f"[saved] {pos_png}")
+    if args.plot:
+        print(f"[saved] {agree_png}")
+        print(f"[saved] {pos_png}")
 
 
 if __name__ == "__main__":

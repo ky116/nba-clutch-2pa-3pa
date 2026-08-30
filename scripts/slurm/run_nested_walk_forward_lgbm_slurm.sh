@@ -51,11 +51,6 @@ INPUT="${INPUT:-data/analysis/shotchoice_panel_clutch_rs.parquet}"
 OUTDIR="${OUTDIR:-results/nested_wf_lgbm}"
 THREADS="${THREADS:-${SLURM_CPUS_PER_TASK:-1}}"
 TREATMENT_SCHEME="${TREATMENT_SCHEME:-binary}"
-ENABLE_STAGEWISE="${ENABLE_STAGEWISE:-1}"
-PROP_CANDIDATES="${PROP_CANDIDATES:-lgbm,xgb}"
-OUTCOME_CANDIDATES="${OUTCOME_CANDIDATES:-lgbm,xgb}"
-TAU_CANDIDATES="${TAU_CANDIDATES:-lgbm,xgb}"
-SELECTION_TAIL_SPAN="${SELECTION_TAIL_SPAN:-3}"
 
 mkdir -p logs
 mkdir -p .joblib
@@ -129,13 +124,6 @@ echo "Python: $PYTHON_CMD"
 echo "Python version: $("$PYTHON_CMD" -V 2>&1)"
 echo "Python site-packages: ${PYTHON_SITE:-<none>}"
 echo "Treatment scheme: $TREATMENT_SCHEME"
-echo "ENABLE_STAGEWISE=${ENABLE_STAGEWISE}"
-if [[ "${ENABLE_STAGEWISE}" == "1" ]]; then
-  echo "PROP_CANDIDATES=${PROP_CANDIDATES}"
-  echo "OUTCOME_CANDIDATES=${OUTCOME_CANDIDATES}"
-  echo "TAU_CANDIDATES=${TAU_CANDIDATES}"
-  echo "SELECTION_TAIL_SPAN=${SELECTION_TAIL_SPAN}"
-fi
 echo "Extra args: ${EXTRA_ARGS[*]}"
 echo ""
 
@@ -158,15 +146,6 @@ CMD=(
   --tau-model lgbm
   --treatment-scheme "$TREATMENT_SCHEME"
 )
-if [[ "${ENABLE_STAGEWISE}" == "1" ]]; then
-  CMD+=(
-    --stagewise-model-selection
-    --prop-candidates "$PROP_CANDIDATES"
-    --outcome-candidates "$OUTCOME_CANDIDATES"
-    --tau-candidates "$TAU_CANDIDATES"
-    --selection-tail-span "$SELECTION_TAIL_SPAN"
-  )
-fi
 "${CMD[@]}" \
   "${EXTRA_ARGS[@]}"
 
