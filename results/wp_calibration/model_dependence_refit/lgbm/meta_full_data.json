@@ -1,0 +1,128 @@
+{
+  "mode": "full_data_retune_then_train",
+  "train_start": 2000,
+  "train_end": 2024,
+  "n_rows": 317230,
+  "feature_cols": [
+    "time_left_game",
+    "score_diff",
+    "OT_flag",
+    "start_type",
+    "start_type_group",
+    "after_off_reb",
+    "elo_diff",
+    "before_home_possession",
+    "era",
+    "own_fouls_period",
+    "opp_fouls_period",
+    "timeouts_left_us",
+    "timeouts_left_them",
+    "own_allowed_2p_pct_eb",
+    "own_allowed_3p_pct_eb",
+    "own_off_2p_pct_eb",
+    "own_off_3p_pct_eb",
+    "own_off_3pa_share_eb",
+    "own_off_2pa_share_eb",
+    "own_allowed_3pa_share_eb",
+    "opp_allowed_2p_pct_eb",
+    "opp_allowed_3p_pct_eb",
+    "opp_off_2p_pct_eb",
+    "opp_off_3p_pct_eb",
+    "opp_off_3pa_share_eb",
+    "opp_off_2pa_share_eb",
+    "opp_allowed_3pa_share_eb"
+  ],
+  "selected_models": {
+    "propensity": "lgbm",
+    "outcome": "lgbm",
+    "tau": "lgbm"
+  },
+  "nuisance_best_prop": {
+    "learning_rate": 0.03,
+    "num_leaves": 31,
+    "min_data_in_leaf": 50,
+    "feature_fraction": 0.9,
+    "bagging_fraction": 0.7,
+    "bagging_freq": 1,
+    "lambda_l2": 0,
+    "lambda_l1": 1,
+    "min_gain_to_split": 0,
+    "n_estimators": 5000
+  },
+  "nuisance_best_outcome": {
+    "learning_rate": 0.03,
+    "num_leaves": 31,
+    "min_data_in_leaf": 300,
+    "feature_fraction": 0.9,
+    "bagging_fraction": 0.9,
+    "bagging_freq": 1,
+    "lambda_l2": 5,
+    "lambda_l1": 0,
+    "min_gain_to_split": 0,
+    "n_estimators": 5000
+  },
+  "tau_best_params": {
+    "learning_rate": 0.05,
+    "num_leaves": 63,
+    "min_data_in_leaf": 200,
+    "feature_fraction": 0.9,
+    "bagging_fraction": 0.9,
+    "bagging_freq": 1,
+    "lambda_l2": 20,
+    "lambda_l1": 0,
+    "min_gain_to_split": 0.5,
+    "n_estimators": 8000
+  },
+  "oof_scheme": "season_loso",
+  "inner_split_count": 5,
+  "inner_splits": [
+    {
+      "train_start": 2000,
+      "train_end": 2009,
+      "test_start": 2010,
+      "test_end": 2012
+    },
+    {
+      "train_start": 2000,
+      "train_end": 2012,
+      "test_start": 2013,
+      "test_end": 2015
+    },
+    {
+      "train_start": 2000,
+      "train_end": 2015,
+      "test_start": 2016,
+      "test_end": 2018
+    },
+    {
+      "train_start": 2000,
+      "train_end": 2018,
+      "test_start": 2019,
+      "test_end": 2021
+    },
+    {
+      "train_start": 2000,
+      "train_end": 2021,
+      "test_start": 2022,
+      "test_end": 2024
+    }
+  ],
+  "early_stopping": true,
+  "nuisance_oos_path": "results/wp_calibration/model_dependence_refit/lgbm/nuisance_oos_train.parquet",
+  "tau_oos_path": "results/wp_calibration/model_dependence_refit/lgbm/tau_oos_train.parquet",
+  "blp_metrics": {
+    "blp_alpha": -0.0016413273665509339,
+    "blp_beta": -0.0502374109555962,
+    "blp_r2": 1.2012578087805537e-06,
+    "blp_alpha_se": 0.001529956914575906,
+    "blp_beta_se": 0.0995489492287087,
+    "blp_alpha_ci_lo": -0.004639987817017734,
+    "blp_alpha_ci_hi": 0.001357333083915866,
+    "blp_beta_ci_lo": -0.24534976614267165,
+    "blp_beta_ci_hi": 0.14487494423147926,
+    "blp_cov_type": "cluster",
+    "blp_n": 317230.0,
+    "blp_n_cluster": 20719.0
+  },
+  "blp_metrics_path": "results/wp_calibration/model_dependence_refit/lgbm/blp_metrics_full_data.json"
+}

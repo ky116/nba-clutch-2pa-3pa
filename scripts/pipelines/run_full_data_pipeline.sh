@@ -72,7 +72,7 @@ WF_SURFACE_OUTDIR="${WF_SURFACE_OUTDIR:-results/wf_cate_surfaces}"
 FIGURE_SOURCE_DIR="${FIGURE_SOURCE_DIR:-results/figure_source_data}"
 FIGURE_OUTDIR="${FIGURE_OUTDIR:-figures}"
 WP_MODEL_DEPENDENCE_OUTDIR="${WP_MODEL_DEPENDENCE_OUTDIR:-results/wp_calibration/model_dependence_sensitivity}"
-WP_RESIDUAL_DIFF_SURFACE="${WP_RESIDUAL_DIFF_SURFACE:-results/wp_calibration/differential_surface/wp_residual_differential_calibration_surface.csv}"
+WP_RESIDUAL_DIFF_SURFACE="${WP_RESIDUAL_DIFF_SURFACE:-results/wp_calibration/model_dependence_refit/ensemble/wp_residual_t30_300_cate_surface_equal_weight.csv}"
 FIGURE_THREADS="${FIGURE_THREADS:-8}"
 FIGURE_MEM="${FIGURE_MEM:-32G}"
 FIGURE_TIME="${FIGURE_TIME:-24:00:00}"
@@ -205,7 +205,7 @@ submit_figures() {
       --time="$FIGURE_TIME" \
       --chdir="$PROJECT_DIR" \
       -o "$PROJECT_DIR/logs/%j.txt" \
-      --wrap "cd '$PROJECT_DIR' && '$py_bin' scripts/helpers/check_reproduction_contracts.py --stage full && '$py_bin' scripts/helpers/rebuild_wf_cate_surfaces_recalibrated.py --outdir '$WF_SURFACE_OUTDIR' --catboost-dir '$WF_ROOT_CAT' --xgb-dir '$WF_ROOT_XGB' --lgbm-dir '$WF_ROOT_LGBM' && '$py_bin' scripts/helpers/summarize_cate_time_window_stability.py --rows '$WF_SURFACE_OUTDIR/outer_fold_ensemble_tau_test_rows.parquet' --outdir '$WF_SURFACE_OUTDIR/time_window_stability' && '$py_bin' scripts/helpers/assemble_manuscript_cate_figures.py --ensemble-dir '$ENSEMBLE_OUTDIR' --wf-dir '$WF_SURFACE_OUTDIR' --figure-source-dir '$FIGURE_SOURCE_DIR' --panel '$INPUT' --outdir '$FIGURE_OUTDIR' && '$py_bin' scripts/helpers/summarize_wp_model_dependence_sensitivity.py --cate-surface '$ENSEMBLE_OUTDIR/full_data_t30_300_cate_surface_equal_weight.csv' --bias-surface '$WP_RESIDUAL_DIFF_SURFACE' --support '$ENSEMBLE_OUTDIR/cate_surface_support/full_data_t30_300_cate_surface_cell_counts.csv' --outdir '$WP_MODEL_DEPENDENCE_OUTDIR' && '$py_bin' scripts/helpers/check_reproduction_contracts.py --stage figures"
+      --wrap "cd '$PROJECT_DIR' && '$py_bin' scripts/helpers/check_reproduction_contracts.py --stage full && '$py_bin' scripts/helpers/rebuild_wf_cate_surfaces_recalibrated.py --outdir '$WF_SURFACE_OUTDIR' --catboost-dir '$WF_ROOT_CAT' --xgb-dir '$WF_ROOT_XGB' --lgbm-dir '$WF_ROOT_LGBM' && '$py_bin' scripts/helpers/summarize_cate_time_window_stability.py --rows '$WF_SURFACE_OUTDIR/outer_fold_ensemble_tau_test_rows.parquet' --outdir '$WF_SURFACE_OUTDIR/time_window_stability' && '$py_bin' scripts/helpers/assemble_manuscript_cate_figures.py --ensemble-dir '$ENSEMBLE_OUTDIR' --wf-dir '$WF_SURFACE_OUTDIR' --figure-source-dir '$FIGURE_SOURCE_DIR' --panel '$INPUT' --outdir '$FIGURE_OUTDIR' && '$py_bin' scripts/helpers/summarize_wp_model_dependence_sensitivity.py --cate-surface '$ENSEMBLE_OUTDIR/full_data_t30_300_cate_surface_equal_weight.csv' --bias-surface '$WP_RESIDUAL_DIFF_SURFACE' --bias-col tau_mean_ensemble --support '$ENSEMBLE_OUTDIR/cate_surface_support/full_data_t30_300_cate_surface_cell_counts.csv' --outdir '$WP_MODEL_DEPENDENCE_OUTDIR' --score-lo -10 --score-hi 10 && '$py_bin' scripts/helpers/check_reproduction_contracts.py --stage figures"
   )
   echo "$out" >&2
   printf '%s\n' "$out" | awk '/Submitted batch job/ {print $4}' | tail -n 1

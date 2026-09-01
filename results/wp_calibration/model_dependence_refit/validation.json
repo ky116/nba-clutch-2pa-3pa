@@ -1,0 +1,12 @@
+{
+  "valid": true,
+  "n_time_points": 25,
+  "time_min": 30.0,
+  "time_max": 300.0,
+  "n_score_points": 21,
+  "score_min": -10.0,
+  "score_max": 10.0,
+  "n_cells": 525,
+  "interpolation": false,
+  "subtraction": "tau_sensitivity = tau_wp - b_hat"
+}

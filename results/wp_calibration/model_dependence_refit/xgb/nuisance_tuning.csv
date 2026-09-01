@@ -1,0 +1,3 @@
+mode,model,params,note
+fixed,xgb,"{""max_depth"": 2, ""learning_rate"": 0.03, ""min_child_weight"": 5, ""subsample"": 0.9, ""colsample_bytree"": 0.9, ""reg_lambda"": 5, ""reg_alpha"": 0.5, ""gamma"": 0, ""n_estimators"": 5000}",retuning_skipped
+fixed,xgb,"{""max_depth"": 4, ""learning_rate"": 0.1, ""min_child_weight"": 20, ""subsample"": 0.7, ""colsample_bytree"": 0.9, ""reg_lambda"": 5, ""reg_alpha"": 0.0, ""gamma"": 1, ""n_estimators"": 5000}",retuning_skipped

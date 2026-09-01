@@ -1,0 +1,116 @@
+{
+  "mode": "full_data_retune_then_train",
+  "train_start": 2000,
+  "train_end": 2024,
+  "n_rows": 317230,
+  "feature_cols": [
+    "time_left_game",
+    "score_diff",
+    "OT_flag",
+    "start_type",
+    "start_type_group",
+    "after_off_reb",
+    "elo_diff",
+    "before_home_possession",
+    "era",
+    "own_fouls_period",
+    "opp_fouls_period",
+    "timeouts_left_us",
+    "timeouts_left_them",
+    "own_allowed_2p_pct_eb",
+    "own_allowed_3p_pct_eb",
+    "own_off_2p_pct_eb",
+    "own_off_3p_pct_eb",
+    "own_off_3pa_share_eb",
+    "own_off_2pa_share_eb",
+    "own_allowed_3pa_share_eb",
+    "opp_allowed_2p_pct_eb",
+    "opp_allowed_3p_pct_eb",
+    "opp_off_2p_pct_eb",
+    "opp_off_3p_pct_eb",
+    "opp_off_3pa_share_eb",
+    "opp_off_2pa_share_eb",
+    "opp_allowed_3pa_share_eb"
+  ],
+  "selected_models": {
+    "propensity": "catboost",
+    "outcome": "catboost",
+    "tau": "catboost"
+  },
+  "nuisance_best_prop": {
+    "depth": 6,
+    "learning_rate": 0.03,
+    "l2_leaf_reg": 10,
+    "min_data_in_leaf": 300,
+    "iterations": 6000,
+    "od_wait": 200
+  },
+  "nuisance_best_outcome": {
+    "depth": 8,
+    "learning_rate": 0.03,
+    "l2_leaf_reg": 30,
+    "min_data_in_leaf": 150,
+    "iterations": 6000,
+    "od_wait": 200
+  },
+  "tau_best_params": {
+    "depth": 8,
+    "learning_rate": 0.05,
+    "l2_leaf_reg": 30,
+    "min_data_in_leaf": 200,
+    "iterations": 8000,
+    "od_wait": 300
+  },
+  "oof_scheme": "season_loso",
+  "inner_split_count": 5,
+  "inner_splits": [
+    {
+      "train_start": 2000,
+      "train_end": 2009,
+      "test_start": 2010,
+      "test_end": 2012
+    },
+    {
+      "train_start": 2000,
+      "train_end": 2012,
+      "test_start": 2013,
+      "test_end": 2015
+    },
+    {
+      "train_start": 2000,
+      "train_end": 2015,
+      "test_start": 2016,
+      "test_end": 2018
+    },
+    {
+      "train_start": 2000,
+      "train_end": 2018,
+      "test_start": 2019,
+      "test_end": 2021
+    },
+    {
+      "train_start": 2000,
+      "train_end": 2021,
+      "test_start": 2022,
+      "test_end": 2024
+    }
+  ],
+  "early_stopping": true,
+  "nuisance_oos_path": "results/wp_calibration/model_dependence_refit/catboost/nuisance_oos_train.parquet",
+  "tau_oos_path": "results/wp_calibration/model_dependence_refit/catboost/tau_oos_train.parquet",
+  "blp_metrics": {
+    "blp_alpha": -0.0016291482252786334,
+    "blp_beta": 0.03239751516521268,
+    "blp_r2": 4.7022587768008606e-07,
+    "blp_alpha_se": 0.0015354538141940275,
+    "blp_beta_se": 0.09800163713016598,
+    "blp_alpha_ci_lo": -0.004638582401023583,
+    "blp_alpha_ci_hi": 0.0013802859504663165,
+    "blp_beta_ci_lo": -0.15968216403587593,
+    "blp_beta_ci_hi": 0.2244771943663013,
+    "blp_cov_type": "cluster",
+    "blp_n": 317230.0,
+    "blp_n_cluster": 20719.0
+  },
+  "blp_metrics_path": "results/wp_calibration/model_dependence_refit/catboost/blp_metrics_full_data.json"
+}

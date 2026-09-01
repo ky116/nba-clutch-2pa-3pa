@@ -270,6 +270,11 @@ def check_figures() -> None:
         ROOT / "figures" / "figures1_cate_surface_0_30s_masked_n50.png",
         ROOT / "results" / "wp_calibration" / "model_dependence_sensitivity" / "wp_model_dependence_sensitivity_surface.csv",
         ROOT / "results" / "wp_calibration" / "model_dependence_sensitivity" / "wp_model_dependence_sensitivity_summary.csv",
+        ROOT
+        / "results"
+        / "wp_calibration"
+        / "model_dependence_sensitivity"
+        / "wp_model_dependence_sensitivity_by_score_margin_region.csv",
         ROOT / "results" / "wp_calibration" / "model_dependence_sensitivity" / "wp_model_dependence_sensitivity_by_score.csv",
         ROOT / "results" / "wp_calibration" / "model_dependence_sensitivity" / "wp_model_dependence_sensitivity_by_time_band.csv",
         ROOT / "results" / "wp_calibration" / "model_dependence_sensitivity" / "wp_model_dependence_sensitivity_extreme_cells.csv",
